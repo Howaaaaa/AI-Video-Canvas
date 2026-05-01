@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { Canvas } from './features/canvas/Canvas';
 import { TitleBar } from './components/TitleBar';
 import { SettingsDialog } from './components/SettingsDialog';
+import { PromptTemplateDialog } from './components/PromptTemplateDialog';
 import { UpdateAvailableDialog, type UpdateIgnoreMode } from './components/UpdateAvailableDialog';
 import { GlobalErrorDialog } from './components/GlobalErrorDialog';
 import { ProjectManager } from './features/project/ProjectManager';
@@ -48,6 +49,7 @@ function App() {
   const [showUpdateDialog, setShowUpdateDialog] = useState(false);
   const [latestVersion, setLatestVersion] = useState<string>('');
   const [currentVersion, setCurrentVersion] = useState<string>('');
+  const [showPromptTemplates, setShowPromptTemplates] = useState(false);
   const [globalError, setGlobalError] = useState<GlobalErrorDialogDetail | null>(null);
 
   const isHydrated = useProjectStore((state) => state.isHydrated);
@@ -214,6 +216,9 @@ function App() {
             setSettingsInitialCategory('general');
             setShowSettings(true);
           }}
+          onPromptTemplateClick={() => {
+            setShowPromptTemplates(true);
+          }}
           showBackButton={!!currentProjectId}
           onBackClick={closeProject}
         />
@@ -242,6 +247,10 @@ function App() {
           details={globalError?.details}
           copyText={globalError?.copyText}
           onClose={() => setGlobalError(null)}
+        />
+        <PromptTemplateDialog
+          isOpen={showPromptTemplates}
+          onClose={() => setShowPromptTemplates(false)}
         />
       </div>
     </ReactFlowProvider>

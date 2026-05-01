@@ -90,7 +90,8 @@
       "aiImageGeneration": "AI 图片",
       "storyboard": "分镜节点",
       "storyboardGen": "分镜生成",
-      "textAnnotation": "文本注释"
+      "textAnnotation": "文本注释",
+      "aiChat": "AI 对话"
     },
     "imageNode": {
       "title": "图片节点",
@@ -140,6 +141,22 @@
     "textAnnotation": {
       "placeholder": "输入 Markdown 文本，取消选中后会渲染预览",
       "empty": "空注释"
+    },
+    "aiChat": {
+      "prompt": "对话内容",
+      "promptPlaceholder": "输入你的问题或指令...",
+      "defaultPrompt": "默认提示词",
+      "defaultPromptPlaceholder": "设定 AI 的角色或行为（可选）",
+      "systemPrompt": "系统提示词",
+      "systemPromptPlaceholder": "设定系统级上下文（可选）",
+      "model": "模型",
+      "send": "发送",
+      "sending": "发送中...",
+      "responseTitle": "AI 回复",
+      "loading": "加载中...",
+      "error": "对话出错",
+      "imageRef": "引用图片",
+      "template": "模板"
     }
   },
   "viewer": {
@@ -309,6 +326,26 @@
   "errorDialog": {
     "detailsTitle": "错误详情",
     "copyReport": "复制报错信息"
+  },
+  "promptTemplate": {
+    "title": "提示词模板",
+    "add": "新建模板",
+    "edit": "编辑模板",
+    "delete": "删除模板",
+    "copy": "复制内容",
+    "untitled": "未命名模板",
+    "emptyHint": "暂无模板，点击 + 创建新模板",
+    "selectHint": "从左侧选择一个模板进行编辑",
+    "titleLabel": "标题",
+    "titlePlaceholder": "输入模板标题",
+    "categoryLabel": "分类",
+    "contentLabel": "内容",
+    "contentPlaceholder": "输入提示词内容...",
+    "category": {
+      "text": "文本",
+      "image": "图片",
+      "video": "视频"
+    }
   }
 }
 

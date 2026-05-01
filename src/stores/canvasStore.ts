@@ -96,13 +96,15 @@ interface CanvasState {
     sourceNodeId: string,
     imageUrl: string,
     aspectRatio: string,
-    previewImageUrl?: string
+    previewImageUrl?: string,
+    tinyPreviewImageUrl?: string,
   ) => string | null;
   addDerivedExportNode: (
     sourceNodeId: string,
     imageUrl: string,
     aspectRatio: string,
     previewImageUrl?: string,
+    tinyPreviewImageUrl?: string,
     options?: {
       defaultTitle?: string;
       resultKind?: ExportImageNodeResultKind;
@@ -215,6 +217,7 @@ function normalizeNodes(rawNodes: CanvasNode[]): CanvasNode[] {
           id: frame.id,
           imageUrl: frame.imageUrl ?? null,
           previewImageUrl: frame.previewImageUrl ?? null,
+          tinyPreviewImageUrl: frame.tinyPreviewImageUrl ?? null,
           aspectRatio:
             typeof frame.aspectRatio === 'string'
               ? frame.aspectRatio
@@ -939,7 +942,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     return { x: anchorX + 2 * stepX, y: anchorY };
   },
 
-  addDerivedUploadNode: (sourceNodeId, imageUrl, aspectRatio, previewImageUrl) => {
+  addDerivedUploadNode: (sourceNodeId, imageUrl, aspectRatio, previewImageUrl, tinyPreviewImageUrl) => {
     const state = get();
     const position = getDerivedNodePosition(state.nodes, sourceNodeId);
     const sourceNode = state.nodes.find((node) => node.id === sourceNodeId);
@@ -947,6 +950,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     const node = canvasNodeFactory.createNode(CANVAS_NODE_TYPES.upload, position, {
       imageUrl,
       previewImageUrl: previewImageUrl ?? null,
+      tinyPreviewImageUrl: tinyPreviewImageUrl ?? null,
       aspectRatio: resolvedAspectRatio,
     });
     const derivedSize = resolveGeneratedImageNodeDimensions(resolvedAspectRatio);
@@ -972,7 +976,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     return node.id;
   },
 
-  addDerivedExportNode: (sourceNodeId, imageUrl, aspectRatio, previewImageUrl, options) => {
+  addDerivedExportNode: (sourceNodeId, imageUrl, aspectRatio, previewImageUrl, tinyPreviewImageUrl, options) => {
     const state = get();
     const sourceNode = state.nodes.find((node) => node.id === sourceNodeId);
     const aspectRatioStrategy = options?.aspectRatioStrategy ?? 'provided';
@@ -1007,6 +1011,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     const exportNodeData: Partial<CanvasNodeData> = {
       imageUrl,
       previewImageUrl: previewImageUrl ?? null,
+      tinyPreviewImageUrl: tinyPreviewImageUrl ?? null,
       aspectRatio: resolvedAspectRatio,
     };
     if (options?.defaultTitle) {

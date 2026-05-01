@@ -38,12 +38,13 @@ function greatestCommonDivisor(a: number, b: number): number {
   return x || 1;
 }
 
-const DEFAULT_PREVIEW_MAX_DIMENSION = 512;
+const DEFAULT_PREVIEW_MAX_DIMENSION = 384;
 const LOCAL_PATH_PREFIX_PATTERN = /^(?:[A-Za-z]:[\\/]|\\\\|\/)/;
 
 export interface PreparedNodeImage {
   imageUrl: string;
   previewImageUrl: string;
+  tinyPreviewImageUrl: string;
   aspectRatio: string;
 }
 
@@ -86,6 +87,25 @@ export function shouldUseOriginalImageByZoom(zoom: number): boolean {
   return Number.isFinite(zoom) && zoom >= ORIGINAL_IMAGE_ZOOM_THRESHOLD;
 }
 
+export function resolveImageSourceByZoom(
+  zoom: number,
+  imageUrl: string | null | undefined,
+  previewImageUrl: string | null | undefined,
+  _tinyPreviewImageUrl: string | null | undefined,
+): string | null {
+  // Tiny level disabled — always use original or preview only
+  if (!Number.isFinite(zoom)) {
+    const picked = imageUrl || previewImageUrl;
+    return picked ? resolveImageDisplayUrl(picked) : null;
+  }
+  if (zoom >= ORIGINAL_IMAGE_ZOOM_THRESHOLD) {
+    const picked = imageUrl || previewImageUrl;
+    return picked ? resolveImageDisplayUrl(picked) : null;
+  }
+  const picked = previewImageUrl || imageUrl;
+  return picked ? resolveImageDisplayUrl(picked) : null;
+}
+
 export function isLikelyLocalImagePath(imageUrl: string): boolean {
   if (!imageUrl) {
     return false;
@@ -108,6 +128,11 @@ export function isLikelyLocalImagePath(imageUrl: string): boolean {
 }
 
 export function resolveImageDisplayUrl(imageUrl: string): string {
+  if (!imageUrl || !imageUrl.trim()) {
+    console.warn('[resolveImageDisplayUrl] Empty imageUrl provided');
+    return imageUrl;
+  }
+
   const lower = imageUrl.toLowerCase();
   if (lower.startsWith('file://')) {
     if (!isTauri()) {
@@ -119,10 +144,14 @@ export function resolveImageDisplayUrl(imageUrl: string): string {
       const decodedPathname = decodeURIComponent(parsed.pathname);
       const normalizedPath = decodedPathname.replace(/^\/([A-Za-z]:[\\/])/, '$1');
       if (!normalizedPath) {
+        console.warn('[resolveImageDisplayUrl] Failed to normalize file:// path:', imageUrl);
         return imageUrl;
       }
-      return convertFileSrc(normalizedPath);
-    } catch {
+      const result = convertFileSrc(normalizedPath);
+      console.info('[resolveImageDisplayUrl] Converted file:// to asset URL:', { original: imageUrl, result });
+      return result;
+    } catch (error) {
+      console.warn('[resolveImageDisplayUrl] Failed to parse file:// URL:', imageUrl, error);
       return imageUrl;
     }
   }
@@ -135,7 +164,9 @@ export function resolveImageDisplayUrl(imageUrl: string): string {
     return imageUrl;
   }
 
-  return convertFileSrc(imageUrl);
+  const result = convertFileSrc(imageUrl);
+  console.info('[resolveImageDisplayUrl] Converted local path to asset URL:', { original: imageUrl, result });
+  return result;
 }
 
 export async function persistImageLocally(source: string): Promise<string> {
@@ -280,6 +311,7 @@ export async function prepareNodeImageFromFile(
     return {
       imageUrl: prepared.imagePath,
       previewImageUrl: prepared.previewImagePath,
+      tinyPreviewImageUrl: prepared.tinyPreviewImagePath,
       aspectRatio: prepared.aspectRatio,
     };
   }
@@ -377,6 +409,7 @@ export async function prepareNodeImage(
       return {
         imageUrl: prepared.imagePath,
         previewImageUrl: prepared.previewImagePath,
+        tinyPreviewImageUrl: prepared.tinyPreviewImagePath,
         aspectRatio: prepared.aspectRatio,
       };
     } catch (error) {
@@ -398,6 +431,12 @@ export async function prepareNodeImage(
       previewDataUrl === normalizedDataUrl
         ? persistedImagePath
         : await persistImageLocally(previewDataUrl);
+    const tinySafeMaxDimension = Math.max(64, Math.floor(safeMaxDimension / 2));
+    const tinyPreviewDataUrl = renderPreviewDataUrl(image, normalizedDataUrl, tinySafeMaxDimension);
+    const tinyPreviewImagePath =
+      tinyPreviewDataUrl === normalizedDataUrl
+        ? persistedImagePath
+        : await persistImageLocally(tinyPreviewDataUrl);
 
     console.info(
       `[upload-perf][imageData] prepareNodeImage browser-fallback total=${Math.round(performance.now() - started)}ms`
@@ -405,6 +444,7 @@ export async function prepareNodeImage(
     return {
       imageUrl: persistedImagePath,
       previewImageUrl: previewImagePath,
+      tinyPreviewImageUrl: tinyPreviewImagePath,
       aspectRatio: reduceAspectRatio(image.naturalWidth, image.naturalHeight),
     };
   } catch (error) {

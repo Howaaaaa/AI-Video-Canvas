@@ -206,3 +206,45 @@ export async function getGenerateImageJob(jobId: string): Promise<GenerationJobS
 export async function listModels(): Promise<string[]> {
   return await invoke('list_models');
 }
+
+export interface ChatMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
+
+export interface ChatRequest {
+  model: string;
+  messages: ChatMessage[];
+  images?: string[];
+}
+
+export interface ChatResponse {
+  content: string;
+}
+
+export async function chat(request: ChatRequest): Promise<ChatResponse> {
+  console.info('[AI] chat request', {
+    model: request.model,
+    messageCount: request.messages.length,
+    imageCount: request.images?.length ?? 0,
+    tauri: isTauri(),
+  });
+
+  if (!isTauri()) {
+    throw new Error('当前不是 Tauri 容器环境，请使用 `npm run tauri dev` 启动');
+  }
+
+  try {
+    const result = await invoke<ChatResponse>('chat', { request });
+    if (!result || typeof result.content !== 'string') {
+      throw new Error('Chat returned invalid response');
+    }
+    return result;
+  } catch (error) {
+    const normalizedError = normalizeInvokeError(error);
+    console.error('[AI] chat failed', { error, normalizedError });
+    const commandError: ErrorWithDetails = new Error(normalizedError.message);
+    commandError.details = normalizedError.details;
+    throw commandError;
+  }
+}
