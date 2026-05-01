@@ -1,5 +1,6 @@
 import type { NodeTypes } from '@xyflow/react';
 
+import { AiChatNode } from './AiChatNode';
 import { GroupNode } from './GroupNode';
 import { ImageEditNode } from './ImageEditNode';
 import { ImageNode } from './ImageNode';
@@ -9,6 +10,7 @@ import { TextAnnotationNode } from './TextAnnotationNode';
 import { UploadNode } from './UploadNode';
 
 export const nodeTypes: NodeTypes = {
+  aiChatNode: AiChatNode,
   exportImageNode: ImageNode,
   groupNode: GroupNode,
   imageNode: ImageEditNode,
@@ -18,4 +20,4 @@ export const nodeTypes: NodeTypes = {
   uploadNode: UploadNode,
 };
 
-export { GroupNode, ImageEditNode, ImageNode, StoryboardGenNode, StoryboardNode, TextAnnotationNode, UploadNode };
+export { AiChatNode, GroupNode, ImageEditNode, ImageNode, StoryboardGenNode, StoryboardNode, TextAnnotationNode, UploadNode };

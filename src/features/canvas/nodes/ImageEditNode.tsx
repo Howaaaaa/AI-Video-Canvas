@@ -9,7 +9,7 @@ import {
   useRef,
 } from 'react';
 import { Handle, Position, useUpdateNodeInternals, type NodeProps } from '@xyflow/react';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, FileText, ChevronDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import {
@@ -70,6 +70,7 @@ import { NodePriceBadge } from '@/features/canvas/ui/NodePriceBadge';
 import { UiButton } from '@/components/ui';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useSettingsStore } from '@/stores/settingsStore';
+import { usePromptTemplateStore } from '@/stores/promptTemplateStore';
 
 type ImageEditNodeProps = NodeProps & {
   id: string;
@@ -89,12 +90,12 @@ interface PickerAnchor {
 
 const PICKER_FALLBACK_ANCHOR: PickerAnchor = { left: 8, top: 8 };
 const PICKER_Y_OFFSET_PX = 20;
-const IMAGE_EDIT_NODE_MIN_WIDTH = 390;
-const IMAGE_EDIT_NODE_MIN_HEIGHT = 180;
+const IMAGE_EDIT_NODE_MIN_WIDTH = 500;
+const IMAGE_EDIT_NODE_MIN_HEIGHT = 200;
 const IMAGE_EDIT_NODE_MAX_WIDTH = 1400;
 const IMAGE_EDIT_NODE_MAX_HEIGHT = 1000;
-const IMAGE_EDIT_NODE_DEFAULT_WIDTH = 520;
-const IMAGE_EDIT_NODE_DEFAULT_HEIGHT = 320;
+const IMAGE_EDIT_NODE_DEFAULT_WIDTH = 500;
+const IMAGE_EDIT_NODE_DEFAULT_HEIGHT = 200;
 
 function getTextareaCaretOffset(
   textarea: HTMLTextAreaElement,
@@ -238,6 +239,7 @@ export const ImageEditNode = memo(({ id, data, selected, width, height }: ImageE
   const [pickerCursor, setPickerCursor] = useState<number | null>(null);
   const [pickerActiveIndex, setPickerActiveIndex] = useState(0);
   const [pickerAnchor, setPickerAnchor] = useState<PickerAnchor>(PICKER_FALLBACK_ANCHOR);
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
 
   const nodes = useCanvasStore((state) => state.nodes);
   const edges = useCanvasStore((state) => state.edges);
@@ -272,6 +274,9 @@ export const ImageEditNode = memo(({ id, data, selected, width, height }: ImageE
     () => incomingImageItems.map((item) => resolveImageDisplayUrl(item.imageUrl)),
     [incomingImageItems]
   );
+
+  const templates = usePromptTemplateStore((state) => state.templates);
+  const imageTemplates = useMemo(() => templates.filter((t) => t.category === 'image'), [templates]);
 
   const imageModels = useMemo(() => listImageModels(), []);
 
@@ -448,6 +453,7 @@ export const ImageEditNode = memo(({ id, data, selected, width, height }: ImageE
 
       setShowImagePicker(false);
       setPickerCursor(null);
+      setShowTemplatePicker(false);
     };
 
     document.addEventListener('mousedown', handleOutside, true);
@@ -854,6 +860,50 @@ export const ImageEditNode = memo(({ id, data, selected, width, height }: ImageE
         />
 
         <div className="ml-auto" />
+
+        {imageTemplates.length > 0 && (
+          <div className="relative flex items-center gap-1">
+            <span className="text-xs text-text-muted">{t('node.aiChat.defaultPrompt')}</span>
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                setShowTemplatePicker(!showTemplatePicker);
+              }}
+              className={`flex items-center gap-0.5 px-2 py-1 text-xs rounded transition-colors hover:bg-bg-dark ${NODE_CONTROL_CHIP_CLASS}`}
+            >
+              <FileText className="w-3 h-3" />
+              <ChevronDown className="w-3 h-3" />
+            </button>
+            {showTemplatePicker && (
+              <div
+                className="absolute right-0 bottom-full z-30 mb-1 w-32 overflow-hidden rounded-lg border border-[rgba(255,255,255,0.16)] bg-surface-dark shadow-lg"
+                onMouseDown={(event) => event.stopPropagation()}
+              >
+                <div className="max-h-[200px] overflow-y-auto">
+                  {imageTemplates.map((template) => (
+                    <button
+                      key={template.id}
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        const currentPrompt = promptDraftRef.current;
+                        const separator = currentPrompt.trim() ? '\n\n' : '';
+                        const nextPrompt = currentPrompt + separator + template.content;
+                        setPromptDraft(nextPrompt);
+                        commitPromptDraft(nextPrompt);
+                        setShowTemplatePicker(false);
+                      }}
+                      className="w-full px-3 py-1.5 text-left text-xs text-text-dark hover:bg-bg-dark transition-colors truncate"
+                    >
+                      {template.title || t('promptTemplate.untitled')}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         <UiButton
           onClick={(event) => {

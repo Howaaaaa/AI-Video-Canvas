@@ -2,6 +2,7 @@ import {
   AUTO_REQUEST_ASPECT_RATIO,
   CANVAS_NODE_TYPES,
   DEFAULT_ASPECT_RATIO,
+  type AiChatNodeData,
   type ImageSize,
   type CanvasNodeData,
   type CanvasNodeType,
@@ -16,7 +17,7 @@ import {
 import { DEFAULT_NODE_DISPLAY_NAME } from './nodeDisplay';
 import { DEFAULT_IMAGE_MODEL_ID } from '../models';
 
-export type MenuIconKey = 'upload' | 'sparkles' | 'layout' | 'text';
+export type MenuIconKey = 'upload' | 'sparkles' | 'layout' | 'text' | 'chat';
 
 export interface CanvasNodeCapabilities {
   toolbar: boolean;
@@ -40,6 +41,8 @@ export interface CanvasNodeDefinition<TData extends CanvasNodeData = CanvasNodeD
   capabilities: CanvasNodeCapabilities;
   connectivity: CanvasNodeConnectivity;
   createDefaultData: () => TData;
+  defaultWidth?: number;
+  defaultHeight?: number;
 }
 
 const uploadNodeDefinition: CanvasNodeDefinition<UploadImageNodeData> = {
@@ -63,6 +66,7 @@ const uploadNodeDefinition: CanvasNodeDefinition<UploadImageNodeData> = {
     displayName: DEFAULT_NODE_DISPLAY_NAME[CANVAS_NODE_TYPES.upload],
     imageUrl: null,
     previewImageUrl: null,
+    tinyPreviewImageUrl: null,
     aspectRatio: '1:1',
     isSizeManuallyAdjusted: false,
     sourceFileName: null,
@@ -86,10 +90,13 @@ const imageEditNodeDefinition: CanvasNodeDefinition<ImageEditNodeData> = {
       fromTarget: false,
     },
   },
+  defaultWidth: 500,
+  defaultHeight: 200,
   createDefaultData: () => ({
     displayName: DEFAULT_NODE_DISPLAY_NAME[CANVAS_NODE_TYPES.imageEdit],
     imageUrl: null,
     previewImageUrl: null,
+    tinyPreviewImageUrl: null,
     aspectRatio: DEFAULT_ASPECT_RATIO,
     isSizeManuallyAdjusted: false,
     requestAspectRatio: AUTO_REQUEST_ASPECT_RATIO,
@@ -124,6 +131,7 @@ const exportImageNodeDefinition: CanvasNodeDefinition<ExportImageNodeData> = {
     displayName: DEFAULT_NODE_DISPLAY_NAME[CANVAS_NODE_TYPES.exportImage],
     imageUrl: null,
     previewImageUrl: null,
+    tinyPreviewImageUrl: null,
     aspectRatio: DEFAULT_ASPECT_RATIO,
     isSizeManuallyAdjusted: false,
     resultKind: 'generic',
@@ -244,10 +252,38 @@ const storyboardGenNodeDefinition: CanvasNodeDefinition<StoryboardGenNodeData> =
     extraParams: {},
     imageUrl: null,
     previewImageUrl: null,
+    tinyPreviewImageUrl: null,
     aspectRatio: DEFAULT_ASPECT_RATIO,
     isGenerating: false,
     generationStartedAt: null,
     generationDurationMs: 60000,
+  }),
+};
+
+const aiChatNodeDefinition: CanvasNodeDefinition<AiChatNodeData> = {
+  type: CANVAS_NODE_TYPES.aiChat,
+  menuLabelKey: 'node.menu.aiChat',
+  menuIcon: 'chat',
+  visibleInMenu: true,
+  capabilities: {
+    toolbar: true,
+    promptInput: false,
+  },
+  connectivity: {
+    sourceHandle: false,
+    targetHandle: true,
+    connectMenu: {
+      fromSource: false,
+      fromTarget: true,
+    },
+  },
+  defaultWidth: 500,
+  defaultHeight: 300,
+  createDefaultData: () => ({
+    displayName: DEFAULT_NODE_DISPLAY_NAME[CANVAS_NODE_TYPES.aiChat],
+    prompt: '',
+    defaultPrompt: '',
+    model: 'doubao/doubao-seed-2-0-mini-260215',
   }),
 };
 
@@ -259,6 +295,7 @@ export const canvasNodeDefinitions: Record<CanvasNodeType, CanvasNodeDefinition>
   [CANVAS_NODE_TYPES.group]: groupNodeDefinition,
   [CANVAS_NODE_TYPES.storyboardSplit]: storyboardSplitDefinition,
   [CANVAS_NODE_TYPES.storyboardGen]: storyboardGenNodeDefinition,
+  [CANVAS_NODE_TYPES.aiChat]: aiChatNodeDefinition,
 };
 
 export function getNodeDefinition(type: CanvasNodeType): CanvasNodeDefinition {

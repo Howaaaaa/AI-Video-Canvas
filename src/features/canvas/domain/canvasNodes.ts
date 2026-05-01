@@ -8,6 +8,7 @@ export const CANVAS_NODE_TYPES = {
   group: 'groupNode',
   storyboardSplit: 'storyboardNode',
   storyboardGen: 'storyboardGenNode',
+  aiChat: 'aiChatNode',
 } as const;
 
 export type CanvasNodeType = (typeof CANVAS_NODE_TYPES)[keyof typeof CANVAS_NODE_TYPES];
@@ -40,6 +41,7 @@ export interface NodeDisplayData {
 export interface NodeImageData extends NodeDisplayData {
   imageUrl: string | null;
   previewImageUrl?: string | null;
+  tinyPreviewImageUrl?: string | null;
   aspectRatio: string;
   isSizeManuallyAdjusted?: boolean;
   [key: string]: unknown;
@@ -84,6 +86,7 @@ export interface StoryboardFrameItem {
   id: string;
   imageUrl: string | null;
   previewImageUrl?: string | null;
+  tinyPreviewImageUrl?: string | null;
   aspectRatio?: string;
   note: string;
   order: number;
@@ -133,11 +136,19 @@ export interface StoryboardGenNodeData {
   extraParams?: Record<string, unknown>;
   imageUrl: string | null;
   previewImageUrl?: string | null;
+  tinyPreviewImageUrl?: string | null;
   aspectRatio: string;
   isGenerating?: boolean;
   generationStartedAt?: number | null;
   generationDurationMs?: number;
   [key: string]: unknown;
+}
+
+export interface AiChatNodeData extends NodeDisplayData {
+  prompt: string;
+  defaultPrompt: string;
+  model: string;
+  systemPrompt?: string;
 }
 
 export type CanvasNodeData =
@@ -147,7 +158,8 @@ export type CanvasNodeData =
   | GroupNodeData
   | ImageEditNodeData
   | StoryboardSplitNodeData
-  | StoryboardGenNodeData;
+  | StoryboardGenNodeData
+  | AiChatNodeData;
 
 export type CanvasNode = Node<CanvasNodeData, CanvasNodeType>;
 export type CanvasEdge = Edge;
@@ -218,6 +230,12 @@ export function isStoryboardGenNode(
   node: CanvasNode | null | undefined
 ): node is Node<StoryboardGenNodeData, typeof CANVAS_NODE_TYPES.storyboardGen> {
   return node?.type === CANVAS_NODE_TYPES.storyboardGen;
+}
+
+export function isAiChatNode(
+  node: CanvasNode | null | undefined
+): node is Node<AiChatNodeData, typeof CANVAS_NODE_TYPES.aiChat> {
+  return node?.type === CANVAS_NODE_TYPES.aiChat;
 }
 
 export function nodeHasImage(node: CanvasNode | null | undefined): boolean {

@@ -48,7 +48,7 @@ import {
   persistImageLocally,
   reduceAspectRatio,
   resolveImageDisplayUrl,
-  shouldUseOriginalImageByZoom,
+  resolveImageSourceByZoom,
 } from '@/features/canvas/application/imageData';
 import { UiButton, UiCheckbox, UiChipButton, UiInput, UiPanel, UiSelect } from '@/components/ui';
 import {
@@ -284,6 +284,7 @@ interface FrameCardProps {
 interface IncomingImageItem {
   imageUrl: string;
   previewImageUrl: string | null;
+  tinyPreviewImageUrl: string | null;
   displayUrl: string;
   label: string;
 }
@@ -312,12 +313,13 @@ const FrameCard = memo(
     const { zoom } = useViewport();
 
     const imageSource = useMemo(() => {
-      const preferOriginal = shouldUseOriginalImageByZoom(zoom);
-      const picked = preferOriginal
-        ? frame.imageUrl || frame.previewImageUrl
-        : frame.previewImageUrl || frame.imageUrl;
-      return picked ? resolveImageDisplayUrl(picked) : null;
-    }, [frame.imageUrl, frame.previewImageUrl, zoom]);
+      return resolveImageSourceByZoom(
+        zoom,
+        frame.imageUrl,
+        frame.previewImageUrl,
+        frame.tinyPreviewImageUrl,
+      );
+    }, [frame.imageUrl, frame.previewImageUrl, frame.tinyPreviewImageUrl, zoom]);
     const viewerSource = useMemo(() => {
       const picked = frame.imageUrl || frame.previewImageUrl;
       return picked ? resolveImageDisplayUrl(picked) : null;
@@ -495,7 +497,7 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
       .filter((edge) => edge.target === id)
       .map((edge) => edge.source);
 
-    const dedupedByImageUrl = new Map<string, { imageUrl: string; previewImageUrl: string | null }>();
+    const dedupedByImageUrl = new Map<string, { imageUrl: string; previewImageUrl: string | null; tinyPreviewImageUrl: string | null }>();
     for (const sourceNodeId of sourceNodeIds) {
       const sourceNode = nodeById.get(sourceNodeId) as CanvasNode | undefined;
       if (!sourceNode) {
@@ -512,6 +514,7 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
         dedupedByImageUrl.set(imageUrl, {
           imageUrl,
           previewImageUrl: sourceNode.data.previewImageUrl ?? null,
+          tinyPreviewImageUrl: sourceNode.data.tinyPreviewImageUrl ?? null,
         });
       }
     }
@@ -524,6 +527,7 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
       incomingImageRefs.map((item, index) => ({
         imageUrl: item.imageUrl,
         previewImageUrl: item.previewImageUrl,
+        tinyPreviewImageUrl: item.tinyPreviewImageUrl,
         displayUrl: resolveImageDisplayUrl(item.previewImageUrl || item.imageUrl),
         label: `图${index + 1}`,
       })),
@@ -688,6 +692,7 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
           prepared.imageUrl,
           prepared.aspectRatio,
           prepared.previewImageUrl,
+          prepared.tinyPreviewImageUrl,
           {
             defaultTitle: frameTitle,
             resultKind: 'storyboardFrameEdit',
@@ -850,6 +855,7 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
         finalImagePath,
         aspectRatio,
         finalPreviewPath,
+        finalPreviewPath,
         {
           defaultTitle: EXPORT_RESULT_DISPLAY_NAME.storyboardSplitExport,
           resultKind: 'storyboardSplitExport',
@@ -1008,6 +1014,7 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
       updateStoryboardFrame(id, frameId, {
         imageUrl: matched?.imageUrl ?? imageUrl,
         previewImageUrl: matched?.previewImageUrl ?? matched?.imageUrl ?? imageUrl,
+        tinyPreviewImageUrl: matched?.tinyPreviewImageUrl ?? matched?.previewImageUrl ?? matched?.imageUrl ?? imageUrl,
       });
       setPickerState(null);
     },

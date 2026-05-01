@@ -122,6 +122,10 @@ function mapNodeImageReferences(
       nextData.previewImageUrl =
         mapImageUrl(nextData.previewImageUrl as string | null | undefined) ?? null;
     }
+    if ('tinyPreviewImageUrl' in nextData) {
+      nextData.tinyPreviewImageUrl =
+        mapImageUrl(nextData.tinyPreviewImageUrl as string | null | undefined) ?? null;
+    }
 
     if (Array.isArray(nextData.frames)) {
       nextData.frames = nextData.frames.map((frame) => {
@@ -139,6 +143,8 @@ function mapNodeImageReferences(
           imageUrl: mapImageUrl(frameRecord.imageUrl as string | null | undefined) ?? null,
           previewImageUrl:
             mapImageUrl(frameRecord.previewImageUrl as string | null | undefined) ?? null,
+          tinyPreviewImageUrl:
+            mapImageUrl(frameRecord.tinyPreviewImageUrl as string | null | undefined) ?? null,
         };
       });
     }

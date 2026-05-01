@@ -38,6 +38,7 @@
         "scope": [
           "$APPDATA/**",
           "$APPLOCALDATA/**",
+          "$RESOURCE/**",
           "$TEMP/**"
         ]
       }

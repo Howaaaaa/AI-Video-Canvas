@@ -240,6 +240,7 @@ pub struct MergeStoryboardImagesResult {
 pub struct PrepareNodeImageResult {
     pub image_path: String,
     pub preview_image_path: String,
+    pub tiny_preview_image_path: String,
     pub aspect_ratio: String,
 }
 
@@ -609,7 +610,8 @@ fn prepare_node_image_from_bytes(
         );
         return Ok(PrepareNodeImageResult {
             image_path: image_path.clone(),
-            preview_image_path: image_path,
+            preview_image_path: image_path.clone(),
+            tiny_preview_image_path: image_path,
             aspect_ratio: reduce_aspect_ratio(width, height),
         });
     }
@@ -638,24 +640,51 @@ fn prepare_node_image_from_bytes(
     let preview_image_path = persist_image_bytes(app, preview_buffer.get_ref(), "png")?;
     let resize_elapsed = resize_started.elapsed().as_millis();
 
+    let tiny_started = Instant::now();
+    let tiny_max_dimension = (safe_max_dimension / 2).max(64);
+    let tiny_scale = tiny_max_dimension as f64 / longest_side as f64;
+    let tiny_target_width = ((width as f64) * tiny_scale).round().max(1.0) as u32;
+    let tiny_target_height = ((height as f64) * tiny_scale).round().max(1.0) as u32;
+
+    let tiny_preview_image_path = if tiny_target_width < target_width || tiny_target_height < target_height {
+        let tiny_resized_rgba = resize_image_fast(&image, tiny_target_width, tiny_target_height)
+            .unwrap_or_else(|_| {
+                image
+                    .resize(tiny_target_width, tiny_target_height, image::imageops::FilterType::Triangle)
+                    .to_rgba8()
+            });
+        let tiny_resized = DynamicImage::ImageRgba8(tiny_resized_rgba);
+        let mut tiny_buffer = Cursor::new(Vec::new());
+        tiny_resized
+            .write_to(&mut tiny_buffer, image::ImageFormat::Png)
+            .map_err(|e| format!("Failed to encode tiny preview image: {}", e))?;
+        persist_image_bytes(app, tiny_buffer.get_ref(), "png")?
+    } else {
+        preview_image_path.clone()
+    };
+    let tiny_elapsed = tiny_started.elapsed().as_millis();
+
     info!(
-        "prepare_node_image done [{}]: bytes={}, ext={}, size={}x{}, max_preview={}, probe={}ms, decode={}ms, persist_original={}ms, resize={}ms, total={}ms",
+        "prepare_node_image done [{}]: bytes={}, ext={}, size={}x{}, max_preview={}, tiny_max={}, probe={}ms, decode={}ms, persist_original={}ms, resize={}ms, tiny_resize={}ms, total={}ms",
         trace_tag,
         bytes.len(),
         extension,
         width,
         height,
         safe_max_dimension,
+        tiny_max_dimension,
         probe_elapsed,
         decode_elapsed,
         persist_elapsed,
         resize_elapsed,
+        tiny_elapsed,
         started.elapsed().as_millis()
     );
 
     Ok(PrepareNodeImageResult {
         image_path,
         preview_image_path,
+        tiny_preview_image_path,
         aspect_ratio: reduce_aspect_ratio(width, height),
     })
 }
@@ -672,7 +701,7 @@ pub async fn prepare_node_image_source(
         return Err("Image source is empty".to_string());
     }
 
-    let safe_max_dimension = max_preview_dimension.unwrap_or(512).clamp(64, 4096);
+    let safe_max_dimension = max_preview_dimension.unwrap_or(384).clamp(64, 4096);
     let resolve_started = Instant::now();
     let (bytes, extension) = resolve_source_bytes(trimmed).await?;
     let resolve_elapsed = resolve_started.elapsed().as_millis();
@@ -705,7 +734,7 @@ pub async fn prepare_node_image_binary(
         return Err("Image bytes are empty".to_string());
     }
 
-    let safe_max_dimension = max_preview_dimension.unwrap_or(512).clamp(64, 4096);
+    let safe_max_dimension = max_preview_dimension.unwrap_or(384).clamp(64, 4096);
     let resolved_extension = extension
         .as_deref()
         .map(normalize_extension)
@@ -1059,11 +1088,29 @@ fn persist_image_bytes(app: &AppHandle, bytes: &[u8], extension: &str) -> Result
     let images_dir = resolve_images_dir(app)?;
     let digest = md5::compute(bytes);
     let filename = format!("{:x}.{}", digest, normalize_extension(extension));
-    let output_path = images_dir.join(filename);
+    let output_path = images_dir.join(&filename);
 
-    if !output_path.exists() {
-        std::fs::write(&output_path, bytes)
-            .map_err(|e| format!("Failed to persist generated image: {}", e))?;
+    if output_path.exists() {
+        return Ok(output_path.to_string_lossy().to_string());
+    }
+
+    // Write to a temporary file first, then rename for atomicity.
+    let temp_filename = format!("{}.tmp-{}", filename, std::process::id());
+    let temp_path = images_dir.join(&temp_filename);
+
+    std::fs::write(&temp_path, bytes)
+        .map_err(|e| format!("Failed to write temp image file: {}", e))?;
+
+    match std::fs::rename(&temp_path, &output_path) {
+        Ok(()) => {}
+        Err(e) => {
+            // If rename failed because target already exists (race condition), clean up temp.
+            if output_path.exists() {
+                std::fs::remove_file(&temp_path).ok();
+            } else {
+                return Err(format!("Failed to rename image file: {}", e));
+            }
+        }
     }
 
     Ok(output_path.to_string_lossy().to_string())
@@ -1327,17 +1374,8 @@ pub async fn persist_image_source(app: AppHandle, source: String) -> Result<Stri
     }
 
     let (bytes, extension) = resolve_source_bytes(trimmed).await?;
-    let images_dir = resolve_images_dir(&app)?;
-    let digest = md5::compute(&bytes);
-    let filename = format!("{:x}.{}", digest, extension);
-    let output_path = images_dir.join(filename);
-
-    if !output_path.exists() {
-        std::fs::write(&output_path, bytes)
-            .map_err(|e| format!("Failed to persist image source: {}", e))?;
-    }
-
-    Ok(output_path.to_string_lossy().to_string())
+    let result = persist_image_bytes(&app, &bytes, &extension)?;
+    Ok(result)
 }
 
 #[tauri::command]
