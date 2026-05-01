@@ -24,7 +24,7 @@ import {
 } from '@/features/canvas/application/imageNodeSizing';
 import {
   resolveImageDisplayUrl,
-  shouldUseOriginalImageByZoom,
+  resolveImageSourceByZoom,
 } from '@/features/canvas/application/imageData';
 import { resolveNodeDisplayName } from '@/features/canvas/domain/nodeDisplay';
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader';
@@ -134,12 +134,13 @@ export const ImageNode = memo(({ id, data, selected, type, width, height }: Imag
   }, [isExportResultNode, isGenerating, t, waitedMinutes]);
 
   const imageSource = useMemo(() => {
-    const preferOriginal = shouldUseOriginalImageByZoom(zoom);
-    const picked = preferOriginal
-      ? data.imageUrl || data.previewImageUrl
-      : data.previewImageUrl || data.imageUrl;
-    return picked ? resolveImageDisplayUrl(picked) : null;
-  }, [data.imageUrl, data.previewImageUrl, zoom]);
+    return resolveImageSourceByZoom(
+      zoom,
+      data.imageUrl,
+      data.previewImageUrl,
+      data.tinyPreviewImageUrl,
+    );
+  }, [data.imageUrl, data.previewImageUrl, data.tinyPreviewImageUrl, zoom]);
 
   // 获取原图 URL 用于查看器
   const originalImageUrl = useMemo(() => {

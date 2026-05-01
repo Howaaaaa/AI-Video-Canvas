@@ -17,6 +17,24 @@ pub struct GenerateRequest {
     pub extra_params: Option<HashMap<String, serde_json::Value>>,
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ChatMessage {
+    pub role: String,
+    pub content: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ChatRequest {
+    pub model: String,
+    pub messages: Vec<ChatMessage>,
+    pub images: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ChatResponse {
+    pub content: String,
+}
+
 #[derive(Debug, Clone)]
 pub struct ProviderTaskHandle {
     pub task_id: String,
@@ -71,6 +89,20 @@ pub trait AIProvider: Send + Sync {
     }
 
     async fn generate(&self, request: GenerateRequest) -> Result<String, AIError>;
+
+    async fn chat(&self, _request: ChatRequest) -> Result<ChatResponse, AIError> {
+        Err(AIError::Provider(format!(
+            "Provider '{}' does not support chat",
+            self.name()
+        )))
+    }
+}
+
+pub fn create_shared_client() -> Result<reqwest::Client, AIError> {
+    reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(300))
+        .build()
+        .map_err(|err| AIError::Provider(format!("Failed to create HTTP client: {}", err)))
 }
 
 pub struct ProviderRegistry {

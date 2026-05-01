@@ -228,6 +228,7 @@ export function NodeToolDialog() {
           prepared.imageUrl,
           prepared.aspectRatio,
           prepared.previewImageUrl,
+          prepared.tinyPreviewImageUrl,
           {
             defaultTitle: resolveResultNodeTitle(activeToolDialog.toolType),
             resultKind: 'generic',

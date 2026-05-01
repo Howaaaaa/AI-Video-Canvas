@@ -269,6 +269,7 @@ export class CanvasToolProcessor implements ToolProcessor {
       id: this.idGenerator.next(),
       imageUrl,
       previewImageUrl: imageUrl,
+      tinyPreviewImageUrl: imageUrl,
       aspectRatio: resolvedFrameAspectRatio,
       note: typeof frameNotes?.[index] === 'string' ? frameNotes[index].trim() : '',
       order: index,

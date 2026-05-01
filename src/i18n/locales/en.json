@@ -90,7 +90,8 @@
       "aiImageGeneration": "AI Image",
       "storyboard": "Storyboard Node",
       "storyboardGen": "Storyboard Generation",
-      "textAnnotation": "Text Annotation"
+      "textAnnotation": "Text Annotation",
+      "aiChat": "AI Chat"
     },
     "imageNode": {
       "title": "Image Node",
@@ -140,6 +141,22 @@
     "textAnnotation": {
       "placeholder": "Write Markdown text. It will render when unselected.",
       "empty": "Empty note"
+    },
+    "aiChat": {
+      "prompt": "Chat Content",
+      "promptPlaceholder": "Enter your question or instruction...",
+      "defaultPrompt": "Default Prompt",
+      "defaultPromptPlaceholder": "Set AI role or behavior (optional)",
+      "systemPrompt": "System Prompt",
+      "systemPromptPlaceholder": "Set system-level context (optional)",
+      "model": "Model",
+      "send": "Send",
+      "sending": "Sending...",
+      "responseTitle": "AI Response",
+      "loading": "Loading...",
+      "error": "Chat error",
+      "imageRef": "Reference Image",
+      "template": "Template"
     }
   },
   "viewer": {
@@ -309,6 +326,26 @@
   "errorDialog": {
     "detailsTitle": "Error details",
     "copyReport": "Copy error report"
+  },
+  "promptTemplate": {
+    "title": "Prompt Templates",
+    "add": "New Template",
+    "edit": "Edit Template",
+    "delete": "Delete Template",
+    "copy": "Copy Content",
+    "untitled": "Untitled Template",
+    "emptyHint": "No templates yet. Click + to create one.",
+    "selectHint": "Select a template from the left to edit",
+    "titleLabel": "Title",
+    "titlePlaceholder": "Enter template title",
+    "categoryLabel": "Category",
+    "contentLabel": "Content",
+    "contentPlaceholder": "Enter prompt content...",
+    "category": {
+      "text": "Text",
+      "image": "Image",
+      "video": "Video"
+    }
   }
 }
 

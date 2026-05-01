@@ -39,7 +39,7 @@ import { NodeResizeHandle } from '@/features/canvas/ui/NodeResizeHandle';
 import {
   prepareNodeImageFromFile,
   resolveImageDisplayUrl,
-  shouldUseOriginalImageByZoom,
+  resolveImageSourceByZoom,
 } from '@/features/canvas/application/imageData';
 import { CanvasNodeImage } from '@/features/canvas/ui/CanvasNodeImage';
 import { useCanvasStore } from '@/stores/canvasStore';
@@ -154,6 +154,7 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
         const nextData: Partial<UploadImageNodeData> = {
           imageUrl: prepared.imageUrl,
           previewImageUrl: prepared.previewImageUrl,
+          tinyPreviewImageUrl: prepared.tinyPreviewImageUrl,
           aspectRatio: prepared.aspectRatio || '1:1',
           sourceFileName: file.name,
         };
@@ -292,12 +293,13 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
     if (transientPreviewUrl) {
       return transientPreviewUrl;
     }
-    const preferOriginal = shouldUseOriginalImageByZoom(zoom);
-    const picked = preferOriginal
-      ? data.imageUrl || data.previewImageUrl
-      : data.previewImageUrl || data.imageUrl;
-    return picked ? resolveImageDisplayUrl(picked) : null;
-  }, [data.imageUrl, data.previewImageUrl, transientPreviewUrl, zoom]);
+    return resolveImageSourceByZoom(
+      zoom,
+      data.imageUrl,
+      data.previewImageUrl,
+      data.tinyPreviewImageUrl,
+    );
+  }, [data.imageUrl, data.previewImageUrl, data.tinyPreviewImageUrl, transientPreviewUrl, zoom]);
 
   useEffect(() => {
     updateNodeInternals(id);

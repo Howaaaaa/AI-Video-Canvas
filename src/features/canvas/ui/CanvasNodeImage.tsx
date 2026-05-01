@@ -1,4 +1,4 @@
-import { memo, useCallback, type ImgHTMLAttributes, type MouseEvent } from 'react';
+import { memo, useCallback, useState, useEffect, type ImgHTMLAttributes, type MouseEvent } from 'react';
 
 import { useCanvasStore } from '@/stores/canvasStore';
 
@@ -37,6 +37,24 @@ export const CanvasNodeImage = memo(({
   ...props
 }: CanvasNodeImageProps) => {
   const openImageViewer = useCanvasStore((state) => state.openImageViewer);
+  const [loadError, setLoadError] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
+
+  useEffect(() => {
+    setLoadError(false);
+  }, [src]);
+
+  const handleError = useCallback(() => {
+    console.warn('[CanvasNodeImage] Image load failed, src:', src);
+    setLoadError(true);
+    retryKey <= 1 && setRetryKey((prev) => prev + 1);
+  }, [src, retryKey]);
+
+  const handleLoad = useCallback(() => {
+    setLoadError(false);
+  }, []);
+
+  const effectiveSrc = loadError && retryKey <= 1 ? `${src}?retry=${retryKey}` : src;
 
   const handleDoubleClick = useCallback((event: MouseEvent<HTMLImageElement>) => {
     onDoubleClick?.(event);
@@ -61,12 +79,15 @@ export const CanvasNodeImage = memo(({
   return (
     <img
       {...props}
-      src={src}
+      key={retryKey}
+      src={effectiveSrc}
       data-viewer-src={
         typeof viewerSourceUrl === 'string' && viewerSourceUrl.trim().length > 0
           ? viewerSourceUrl.trim()
           : undefined
       }
+      onError={handleError}
+      onLoad={handleLoad}
       onDoubleClick={handleDoubleClick}
     />
   );

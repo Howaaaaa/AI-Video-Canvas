@@ -4,6 +4,7 @@ import {
   useEffect,
   useMemo,
   useRef,
+  type DragEvent as ReactDragEvent,
   type MouseEvent as ReactMouseEvent,
 } from 'react';
 import {
@@ -35,7 +36,7 @@ import {
   type CanvasNodeType,
   DEFAULT_NODE_WIDTH,
 } from '@/features/canvas/domain/canvasNodes';
-import { prepareNodeImage } from '@/features/canvas/application/imageData';
+import { prepareNodeImage, prepareNodeImageFromFile } from '@/features/canvas/application/imageData';
 import {
   buildGenerationErrorReport,
   CURRENT_RUNTIME_SESSION_ID,
@@ -493,10 +494,14 @@ export function Canvas() {
               const previewWithMetadata = prepared.previewImageUrl === prepared.imageUrl
                 ? imageWithMetadata
                 : prepared.previewImageUrl;
+              const tinyPreviewWithMetadata = prepared.tinyPreviewImageUrl === prepared.imageUrl
+                ? imageWithMetadata
+                : prepared.tinyPreviewImageUrl;
 
               updateNodeData(pendingNode.id, {
                 imageUrl: imageWithMetadata,
                 previewImageUrl: previewWithMetadata,
+                tinyPreviewImageUrl: tinyPreviewWithMetadata,
                 aspectRatio: prepared.aspectRatio,
                 isGenerating: false,
                 generationStartedAt: null,
@@ -1567,6 +1572,64 @@ export function Canvas() {
     [connectNodes, nodes, pendingConnectStart, reactFlowInstance, scheduleCanvasPersist]
   );
 
+  const handleDragOver = useCallback((event: ReactDragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'copy';
+    }
+  }, []);
+
+  const handleDrop = useCallback(
+    async (event: ReactDragEvent<HTMLDivElement>) => {
+      event.preventDefault();
+
+      const items = Array.from(event.dataTransfer.items);
+      const imageFiles: File[] = [];
+
+      for (const item of items) {
+        if (item.kind === 'file' && item.type.startsWith('image/')) {
+          const file = item.getAsFile();
+          if (file) {
+            imageFiles.push(file);
+          }
+        }
+      }
+
+      if (imageFiles.length === 0) {
+        return;
+      }
+
+      const processPromises = imageFiles.map(async (file, i) => {
+        const offsetX = (i % 3) * 220;
+        const offsetY = Math.floor(i / 3) * 220;
+
+        const flowPos = reactFlowInstance.screenToFlowPosition({
+          x: event.clientX + offsetX,
+          y: event.clientY + offsetY,
+        });
+
+        try {
+          const prepared = await prepareNodeImageFromFile(file);
+
+          const newNodeId = addNode(CANVAS_NODE_TYPES.upload, flowPos);
+          updateNodeData(newNodeId, {
+            imageUrl: prepared.imageUrl,
+            previewImageUrl: prepared.previewImageUrl,
+            tinyPreviewImageUrl: prepared.tinyPreviewImageUrl,
+            aspectRatio: prepared.aspectRatio || '1:1',
+            sourceFileName: file.name,
+          });
+        } catch (error) {
+          console.error('Failed to process dropped image:', file.name, error);
+        }
+      });
+
+      await Promise.all(processPromises);
+      scheduleCanvasPersist(0);
+    },
+    [addNode, reactFlowInstance, scheduleCanvasPersist, updateNodeData]
+  );
+
   const emptyHint = useMemo(
     () => (
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
@@ -1598,6 +1661,8 @@ export function Canvas() {
         onNodeDrag={handleNodeDrag}
         onNodeDragStop={handleNodeDragStop}
         onPaneClick={handlePaneClick}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
         onMove={handleMove}
         onMoveStart={handleMoveStart}
         onMoveEnd={handleMoveEnd}

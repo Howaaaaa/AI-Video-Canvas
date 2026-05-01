@@ -56,6 +56,7 @@ export interface StoryboardImageMetadata {
 export interface PrepareNodeImageSourceResult {
   imagePath: string;
   previewImagePath: string;
+  tinyPreviewImagePath: string;
   aspectRatio: string;
 }
 

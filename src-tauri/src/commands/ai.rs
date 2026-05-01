@@ -14,8 +14,8 @@ use uuid::Uuid;
 use crate::ai::error::AIError;
 use crate::ai::providers::build_default_providers;
 use crate::ai::{
-    GenerateRequest, ProviderRegistry, ProviderTaskHandle, ProviderTaskPollResult,
-    ProviderTaskSubmission,
+    ChatRequest, ChatResponse, GenerateRequest, ProviderRegistry, ProviderTaskHandle,
+    ProviderTaskPollResult, ProviderTaskSubmission,
 };
 
 static REGISTRY: std::sync::OnceLock<ProviderRegistry> = std::sync::OnceLock::new();
@@ -539,4 +539,18 @@ pub async fn generate_image(request: GenerateRequestDto) -> Result<String, Strin
 #[tauri::command]
 pub async fn list_models() -> Result<Vec<String>, String> {
     Ok(get_registry().list_models())
+}
+
+#[tauri::command]
+pub async fn chat(request: ChatRequest) -> Result<ChatResponse, String> {
+    info!("Chat request with model: {}", request.model);
+
+    let registry = get_registry();
+    let provider = registry
+        .resolve_provider_for_model(&request.model)
+        .or_else(|| registry.get_default_provider())
+        .cloned()
+        .ok_or_else(|| "Provider not found for chat".to_string())?;
+
+    provider.chat(request).await.map_err(|e| e.to_string())
 }
