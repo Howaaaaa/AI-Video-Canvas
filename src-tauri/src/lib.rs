@@ -8,6 +8,7 @@ use commands::ai as ai_commands;
 use commands::image;
 use commands::project_state;
 use commands::system;
+use commands::video;
 use commands::update;
 use tauri::Manager;
 use tracing::{info, warn};
@@ -164,6 +165,9 @@ pub fn run() {
             image::split_image_source,
             image::prepare_node_image_source,
             image::prepare_node_image_binary,
+            video::prepare_node_video_binary,
+            video::download_remote_video,
+            video::copy_video_to_clipboard,
             image::crop_image_source,
             image::merge_storyboard_images,
             image::read_storyboard_image_metadata,
@@ -182,6 +186,7 @@ pub fn run() {
             ai_commands::generate_image,
             ai_commands::list_models,
             ai_commands::chat,
+            ai_commands::generate_video,
             project_state::list_project_summaries,
             project_state::get_project_record,
             project_state::upsert_project_record,

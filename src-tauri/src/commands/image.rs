@@ -1116,7 +1116,7 @@ fn persist_image_bytes(app: &AppHandle, bytes: &[u8], extension: &str) -> Result
     Ok(output_path.to_string_lossy().to_string())
 }
 
-fn normalize_extension(raw_ext: &str) -> String {
+pub(crate) fn normalize_extension(raw_ext: &str) -> String {
     let ext = raw_ext.trim().trim_start_matches('.').to_ascii_lowercase();
     if ext.is_empty() {
         return "png".to_string();

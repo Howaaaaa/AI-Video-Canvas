@@ -554,3 +554,72 @@ pub async fn chat(request: ChatRequest) -> Result<ChatResponse, String> {
 
     provider.chat(request).await.map_err(|e| e.to_string())
 }
+
+#[derive(Debug, Deserialize)]
+pub struct VideoGenerateRequestDto {
+    pub prompt: String,
+    pub model: String,
+    pub duration: u32,
+    pub aspect_ratio: String,
+    pub resolution: String,
+    pub output_audio: bool,
+    pub user_generation_mode: String,
+    pub reference_images: Option<Vec<String>>,
+    pub extra_params: Option<HashMap<String, Value>>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct VideoGenerateResultDto {
+    pub video_url: String,
+    pub duration: u32,
+}
+
+#[tauri::command]
+pub async fn generate_video(
+    app: AppHandle,
+    request: VideoGenerateRequestDto,
+) -> Result<VideoGenerateResultDto, String> {
+    info!(
+        "Generate video request: model={}, duration={}, aspect_ratio={}, resolution={}, output_audio={}, mode={}",
+        request.model, request.duration, request.aspect_ratio, request.resolution, request.output_audio, request.user_generation_mode
+    );
+
+    let registry = get_registry();
+    let provider = registry
+        .resolve_provider_for_model(&request.model)
+        .ok_or_else(|| format!("Provider not found for model: {}", request.model))?;
+
+    // Build GenerateRequest for video
+    let generate_request = GenerateRequest {
+        prompt: request.prompt,
+        model: request.model,
+        size: request.resolution,
+        aspect_ratio: request.aspect_ratio,
+        reference_images: request.reference_images,
+        extra_params: Some({
+            let mut params = HashMap::new();
+            params.insert("duration".to_string(), Value::Number(request.duration.into()));
+            params.insert("output_audio".to_string(), Value::Bool(request.output_audio));
+            params.insert("userGenerationMode".to_string(), Value::String(request.user_generation_mode));
+            if let Some(extra) = request.extra_params {
+                params.extend(extra);
+            }
+            params
+        }),
+    };
+
+    // Submit and wait for completion
+    let result_url = provider.generate(generate_request).await.map_err(|e| e.to_string())?;
+
+    info!("Generate video success: video_url={}", result_url);
+
+    // Download and persist the video locally
+    let local_path = crate::commands::video::persist_video_from_url(&app, &result_url).await?;
+
+    info!("Video persisted locally: {}", local_path);
+
+    Ok(VideoGenerateResultDto {
+        video_url: local_path,
+        duration: request.duration,
+    })
+}
