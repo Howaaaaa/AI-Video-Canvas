@@ -248,3 +248,57 @@ export async function chat(request: ChatRequest): Promise<ChatResponse> {
     throw commandError;
   }
 }
+
+// Video generation types and commands
+export interface VideoGenerateRequest {
+  prompt: string;
+  model: string;
+  duration: number;
+  aspect_ratio: string;
+  resolution: string;
+  output_audio: boolean;
+  user_generation_mode: 'start-end' | 'reference';
+  reference_images?: string[];
+  extra_params?: Record<string, unknown>;
+}
+
+export interface VideoGenerateResult {
+  video_url: string;
+  duration: number;
+}
+
+export async function generateVideo(request: VideoGenerateRequest): Promise<VideoGenerateResult> {
+  console.info('[AI] generate_video request', {
+    prompt: truncateText(request.prompt),
+    model: request.model,
+    duration: request.duration,
+    aspect_ratio: request.aspect_ratio,
+    resolution: request.resolution,
+    output_audio: request.output_audio,
+    user_generation_mode: request.user_generation_mode,
+    imageCount: request.reference_images?.length ?? 0,
+    tauri: isTauri(),
+  });
+
+  if (!isTauri()) {
+    throw new Error('当前不是 Tauri 容器环境，请使用 `npm run tauri dev` 启动');
+  }
+
+  try {
+    const result = await invoke<VideoGenerateResult>('generate_video', { request });
+    if (!result || typeof result.video_url !== 'string') {
+      throw new Error('generate_video returned invalid response');
+    }
+    console.info('[AI] generate_video success', {
+      videoUrl: truncateText(result.video_url, 100),
+      duration: result.duration,
+    });
+    return result;
+  } catch (error) {
+    const normalizedError = normalizeInvokeError(error);
+    console.error('[AI] generate_video failed', { error, normalizedError });
+    const commandError: ErrorWithDetails = new Error(normalizedError.message);
+    commandError.details = normalizedError.details;
+    throw commandError;
+  }
+}

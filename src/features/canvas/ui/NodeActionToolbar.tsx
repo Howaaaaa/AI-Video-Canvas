@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import {
   NODE_TOOL_TYPES,
   isExportImageNode,
+  isExportVideoNode,
   isGroupNode,
   isImageEditNode,
   isStoryboardGenNode,
@@ -24,6 +25,11 @@ import {
   saveImageSourceToDirectory,
   saveImageSourceToPath,
 } from '@/commands/image';
+import {
+  copyVideoToClipboard,
+  saveVideoSourceToPath,
+  saveVideoSourceToDirectory,
+} from '@/commands/video';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { UI_POPOVER_TRANSITION_MS } from '@/components/ui/motion';
@@ -59,12 +65,12 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
   const tools = useMemo(() => getNodeToolPlugins(node), [node]);
   const deleteNode = useCanvasStore((state) => state.deleteNode);
   const ungroupNode = useCanvasStore((state) => state.ungroupNode);
-  const canReupload = isUploadNode(node) && Boolean(node.data.imageUrl);
+  const canReupload = isUploadNode(node) && (Boolean(node.data.imageUrl) || Boolean((node.data as { videoUrl?: string | null }).videoUrl));
   const downloadPresetPaths = useSettingsStore((state) => state.downloadPresetPaths);
   const ignoreAtTagWhenCopyingAndGenerating = useSettingsStore(
     (state) => state.ignoreAtTagWhenCopyingAndGenerating
   );
-  const [downloadMenu, setDownloadMenu] = useState<{ x: number; y: number } | null>(null);
+  const [downloadMenu, setDownloadMenu] = useState<{ open: boolean } | null>(null);
   const [isDownloadMenuVisible, setIsDownloadMenuVisible] = useState(false);
   const [isCopySuccess, setIsCopySuccess] = useState(false);
   const [isCopyTextSuccess, setIsCopyTextSuccess] = useState(false);
@@ -75,12 +81,19 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
   const copyErrorFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const downloadMenuCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const imageSource = useMemo(() => {
-    if (isUploadNode(node) || isImageEditNode(node) || isExportImageNode(node)) {
+    if (isUploadNode(node) || isImageEditNode(node) || isExportImageNode(node) || isExportVideoNode(node)) {
       return node.data.imageUrl || node.data.previewImageUrl || node.data.tinyPreviewImageUrl || null;
     }
     return null;
   }, [node]);
+  const videoSource = useMemo(() => {
+    if (isUploadNode(node) || isExportVideoNode(node)) {
+      return (node.data as { videoUrl?: string | null }).videoUrl || null;
+    }
+    return null;
+  }, [node]);
   const canHandleImage = Boolean(imageSource);
+  const canHandleVideo = Boolean(videoSource);
   const generationError =
     isExportImageNode(node)
     && typeof (node.data as { generationError?: unknown }).generationError === 'string'
@@ -199,6 +212,27 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
     }
   }, [imageSource]);
 
+  const handleCopyVideo = useCallback(async () => {
+    if (!videoSource) {
+      return;
+    }
+
+    setIsCopySuccess(true);
+    if (copyFeedbackTimerRef.current) {
+      clearTimeout(copyFeedbackTimerRef.current);
+    }
+    copyFeedbackTimerRef.current = setTimeout(() => {
+      setIsCopySuccess(false);
+      copyFeedbackTimerRef.current = null;
+    }, 1100);
+
+    try {
+      await copyVideoToClipboard(videoSource);
+    } catch (error) {
+      console.error('Failed to copy video to clipboard', error);
+    }
+  }, [videoSource]);
+
   const storyboardText = useMemo(() => {
     if (isStoryboardGen) {
       return node.data.frames
@@ -266,11 +300,22 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
   }, [canCopyGenerationError, generationErrorReport]);
 
   const handleDownloadSaveAs = useCallback(async () => {
-    if (!imageSource) {
-      return;
-    }
-
     try {
+      if (videoSource) {
+        const selectedPath = await save({
+          defaultPath: `video-${node.id}.mp4`,
+          filters: [{ name: 'Video', extensions: ['mp4'] }],
+        });
+        if (!selectedPath || Array.isArray(selectedPath)) {
+          return;
+        }
+        await saveVideoSourceToPath(videoSource, selectedPath);
+        closeDownloadMenu();
+        return;
+      }
+      if (!imageSource) {
+        return;
+      }
       const selectedPath = await save({
         defaultPath: `node-${node.id}.png`,
       });
@@ -280,23 +325,28 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
       await saveImageSourceToPath(imageSource, selectedPath);
       closeDownloadMenu();
     } catch (error) {
-      console.error('Failed to save image with save-as', error);
+      console.error('Failed to save with save-as', error);
     }
-  }, [closeDownloadMenu, imageSource, node.id]);
+  }, [closeDownloadMenu, imageSource, videoSource, node.id]);
 
   const handleDownloadToPreset = useCallback(
     async (targetDir: string) => {
-      if (!imageSource) {
-        return;
-      }
       try {
+        if (videoSource) {
+          await saveVideoSourceToDirectory(videoSource, targetDir, `video-${node.id}`);
+          closeDownloadMenu();
+          return;
+        }
+        if (!imageSource) {
+          return;
+        }
         await saveImageSourceToDirectory(imageSource, targetDir, `node-${node.id}`);
         closeDownloadMenu();
       } catch (error) {
-        console.error('Failed to save image to preset dir', error);
+        console.error('Failed to save to preset dir', error);
       }
     },
-    [closeDownloadMenu, imageSource, node.id]
+    [closeDownloadMenu, imageSource, videoSource, node.id]
   );
 
   return (
@@ -342,16 +392,20 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
             {t('nodeToolbar.reupload')}
           </UiChipButton>
         )}
-        {!isImageEdit && canHandleImage && (
+        {!isImageEdit && (canHandleImage || canHandleVideo) && (
           <UiChipButton
-            key="image-copy"
+            key={canHandleVideo ? 'video-copy' : 'image-copy'}
             className={`h-8 ${TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs ${TOOLBAR_NEUTRAL_BUTTON_CLASS} ${
               isCopySuccess
                 ? '!border-emerald-400/70 !bg-emerald-500/20 !text-emerald-200 hover:!bg-emerald-500/30'
                 : ''
             }`}
             onClick={() => {
-              void handleCopyImage();
+              if (canHandleVideo) {
+                void handleCopyVideo();
+              } else {
+                void handleCopyImage();
+              }
             }}
           >
             <Copy className="h-3.5 w-3.5" />
@@ -390,20 +444,13 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
             {isCopyErrorSuccess ? t('nodeToolbar.copied') : t('nodeToolbar.copyErrorReport')}
           </UiChipButton>
         )}
-        {!isImageEdit && canHandleImage && (
+        {!isImageEdit && (canHandleImage || canHandleVideo) && (
           <UiChipButton
-            key="image-download"
+            key={canHandleVideo ? 'video-download' : 'image-download'}
             className={`h-8 ${TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs ${TOOLBAR_NEUTRAL_BUTTON_CLASS}`}
             onClick={(event) => {
               event.stopPropagation();
-              if (downloadPresetPaths.length === 0) {
-                void handleDownloadSaveAs();
-                return;
-              }
-              setDownloadMenu({
-                x: event.clientX,
-                y: event.clientY,
-              });
+              setDownloadMenu({ open: true });
               setIsDownloadMenuVisible(false);
             }}
           >
@@ -442,8 +489,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
       {!isImageEdit && downloadMenu && (
         <div
           ref={downloadMenuRef}
-          className={`fixed z-[120] min-w-[280px] rounded-xl border border-[rgba(255,255,255,0.18)] bg-surface-dark/95 p-2 shadow-2xl backdrop-blur-sm transition-opacity duration-150 ${isDownloadMenuVisible ? 'opacity-100' : 'opacity-0'}`}
-          style={{ left: `${downloadMenu.x}px`, top: `${downloadMenu.y}px` }}
+          className={`fixed right-4 top-12 z-[120] min-w-[200px] max-w-[320px] rounded-xl border border-[rgba(255,255,255,0.18)] bg-surface-dark/95 p-2 shadow-2xl backdrop-blur-sm transition-opacity duration-150 ${isDownloadMenuVisible ? 'opacity-100' : 'opacity-0'}`}
         >
           <button
             type="button"

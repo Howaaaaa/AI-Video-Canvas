@@ -82,16 +82,20 @@
     "thinkingLevelDesc": "仅对 fal 的 Nano Banana 2 生效；高思考会额外增加费用。",
     "thinkingDisabled": "关闭",
     "thinkingMinimal": "标准",
-    "thinkingHigh": "高"
+    "thinkingHigh": "高",
+    "audio": "音频",
+    "bgm": "背景音乐",
+    "outputAudio": "生成音频"
   },
   "node": {
     "menu": {
-      "uploadImage": "上传图片",
+      "uploadImage": "上传",
       "aiImageGeneration": "AI 图片",
       "storyboard": "分镜节点",
       "storyboardGen": "分镜生成",
       "textAnnotation": "文本注释",
-      "aiChat": "AI 对话"
+      "aiChat": "AI 对话",
+      "aiVideo": "AI 视频"
     },
     "imageNode": {
       "title": "图片节点",
@@ -101,7 +105,7 @@
       "aspectRatio": "宽高比",
       "referenceImages": "参考图",
       "noImage": "暂无图片",
-      "dragImage": "拖拽或点击上传图片",
+      "dragImage": "拖拽或点击上传图片/视频",
       "resultAlt": "结果图",
       "generatedAlt": "生成图",
       "waitingResult": "等待输出结果图片",
@@ -117,7 +121,7 @@
     },
     "upload": {
       "uploadedAlt": "已上传图片",
-      "hint": "点击或拖拽上传图片"
+      "hint": "点击或拖拽上传图片/视频"
     },
     "storyboardNode": {
       "title": "分镜节点",
@@ -157,6 +161,23 @@
       "error": "对话出错",
       "imageRef": "引用图片",
       "template": "模板"
+    },
+    "aiVideo": {
+      "promptRequired": "请输入视频描述",
+      "apiKeyRequired": "请在设置中填写 LemonData API Key",
+      "promptPlaceholder": "描述你想要生成的视频内容...",
+      "duration": "时长",
+      "aspectRatio": "比例",
+      "resolution": "清晰度",
+      "audio": "音频",
+        "generationMode": "生成方式",
+        "audioOn": "开启",
+        "audioOff": "关闭",
+      "textToVideo": "文生视频",
+      "imageToVideo": "图生视频",
+      "startEndToVideo": "首尾帧",
+      "referenceToVideo": "参考生图",
+      "generating": "生成中..."
     }
   },
   "viewer": {

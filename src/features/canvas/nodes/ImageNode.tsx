@@ -185,12 +185,12 @@ export const ImageNode = memo(({ id, data, selected, type, width, height }: Imag
             className="h-full w-full object-contain"
           />
         ) : hasGenerationError ? (
-          <div className="flex h-full w-full flex-col items-center justify-center gap-2 px-4 text-red-300">
-            <AlertTriangle className="h-7 w-7 opacity-90" />
-            <span className="text-center text-[12px] font-medium leading-5 text-red-200">
+          <div className="flex h-full w-full flex-col items-center justify-center gap-2 px-4">
+            <AlertTriangle className="h-7 w-7 text-red-500" />
+            <span className="text-center text-[12px] font-medium leading-5 text-red-500">
               {t('node.imageNode.generationFailed')}
             </span>
-            <span className="max-h-[88px] overflow-y-auto break-words text-center text-[11px] leading-5 text-red-200/90">
+            <span className="max-h-[88px] overflow-y-auto break-words text-center text-[11px] leading-5 text-red-400">
               {generationError}
             </span>
           </div>
