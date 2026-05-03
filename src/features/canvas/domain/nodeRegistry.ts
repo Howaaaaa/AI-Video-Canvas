@@ -3,10 +3,12 @@ import {
   CANVAS_NODE_TYPES,
   DEFAULT_ASPECT_RATIO,
   type AiChatNodeData,
+  type AiVideoNodeData,
   type ImageSize,
   type CanvasNodeData,
   type CanvasNodeType,
   type ExportImageNodeData,
+  type ExportVideoNodeData,
   type GroupNodeData,
   type ImageEditNodeData,
   type StoryboardSplitNodeData,
@@ -17,7 +19,7 @@ import {
 import { DEFAULT_NODE_DISPLAY_NAME } from './nodeDisplay';
 import { DEFAULT_IMAGE_MODEL_ID } from '../models';
 
-export type MenuIconKey = 'upload' | 'sparkles' | 'layout' | 'text' | 'chat';
+export type MenuIconKey = 'upload' | 'sparkles' | 'layout' | 'text' | 'chat' | 'video';
 
 export interface CanvasNodeCapabilities {
   toolbar: boolean;
@@ -70,6 +72,9 @@ const uploadNodeDefinition: CanvasNodeDefinition<UploadImageNodeData> = {
     aspectRatio: '1:1',
     isSizeManuallyAdjusted: false,
     sourceFileName: null,
+    mediaType: undefined,
+    videoUrl: null,
+    videoDuration: undefined,
   }),
 };
 
@@ -135,6 +140,36 @@ const exportImageNodeDefinition: CanvasNodeDefinition<ExportImageNodeData> = {
     aspectRatio: DEFAULT_ASPECT_RATIO,
     isSizeManuallyAdjusted: false,
     resultKind: 'generic',
+  }),
+};
+
+const exportVideoNodeDefinition: CanvasNodeDefinition<ExportVideoNodeData> = {
+  type: CANVAS_NODE_TYPES.exportVideo,
+  menuLabelKey: 'node.menu.uploadImage',
+  menuIcon: 'video',
+  visibleInMenu: false,
+  capabilities: {
+    toolbar: true,
+    promptInput: false,
+  },
+  connectivity: {
+    sourceHandle: true,
+    targetHandle: true,
+    connectMenu: {
+      fromSource: false,
+      fromTarget: false,
+    },
+  },
+  createDefaultData: () => ({
+    displayName: DEFAULT_NODE_DISPLAY_NAME[CANVAS_NODE_TYPES.exportVideo],
+    imageUrl: null,
+    previewImageUrl: null,
+    tinyPreviewImageUrl: null,
+    aspectRatio: '16:9',
+    isSizeManuallyAdjusted: false,
+    mediaType: 'video',
+    videoUrl: null,
+    videoDuration: undefined,
   }),
 };
 
@@ -287,6 +322,37 @@ const aiChatNodeDefinition: CanvasNodeDefinition<AiChatNodeData> = {
   }),
 };
 
+const aiVideoNodeDefinition: CanvasNodeDefinition<AiVideoNodeData> = {
+  type: CANVAS_NODE_TYPES.aiVideo,
+  menuLabelKey: 'node.menu.aiVideo',
+  menuIcon: 'video',
+  visibleInMenu: true,
+  capabilities: {
+    toolbar: true,
+    promptInput: false,
+  },
+  connectivity: {
+    sourceHandle: true,
+    targetHandle: true,
+    connectMenu: {
+      fromSource: true,
+      fromTarget: false,
+    },
+  },
+  defaultWidth: 500,
+  defaultHeight: 200,
+  createDefaultData: () => ({
+    displayName: DEFAULT_NODE_DISPLAY_NAME[CANVAS_NODE_TYPES.aiVideo],
+    prompt: '',
+    model: 'lemondata/seedance-2.0-fast',
+    duration: 5,
+    aspectRatio: '16:9',
+    resolution: '480p',
+    outputAudio: false,
+    userGenerationMode: 'start-end',
+  }),
+};
+
 export const canvasNodeDefinitions: Record<CanvasNodeType, CanvasNodeDefinition> = {
   [CANVAS_NODE_TYPES.upload]: uploadNodeDefinition,
   [CANVAS_NODE_TYPES.imageEdit]: imageEditNodeDefinition,
@@ -296,6 +362,8 @@ export const canvasNodeDefinitions: Record<CanvasNodeType, CanvasNodeDefinition>
   [CANVAS_NODE_TYPES.storyboardSplit]: storyboardSplitDefinition,
   [CANVAS_NODE_TYPES.storyboardGen]: storyboardGenNodeDefinition,
   [CANVAS_NODE_TYPES.aiChat]: aiChatNodeDefinition,
+  [CANVAS_NODE_TYPES.aiVideo]: aiVideoNodeDefinition,
+  [CANVAS_NODE_TYPES.exportVideo]: exportVideoNodeDefinition,
 };
 
 export function getNodeDefinition(type: CanvasNodeType): CanvasNodeDefinition {

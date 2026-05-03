@@ -9,6 +9,8 @@ export const CANVAS_NODE_TYPES = {
   storyboardSplit: 'storyboardNode',
   storyboardGen: 'storyboardGenNode',
   aiChat: 'aiChatNode',
+  aiVideo: 'aiVideoNode',
+  exportVideo: 'exportVideoNode',
 } as const;
 
 export type CanvasNodeType = (typeof CANVAS_NODE_TYPES)[keyof typeof CANVAS_NODE_TYPES];
@@ -47,8 +49,16 @@ export interface NodeImageData extends NodeDisplayData {
   [key: string]: unknown;
 }
 
+export type MediaType = 'image' | 'video';
+
 export interface UploadImageNodeData extends NodeImageData {
   sourceFileName?: string | null;
+  mediaType?: MediaType;
+  videoUrl?: string | null;
+  videoDuration?: number;
+  isGenerating?: boolean;
+  generationStartedAt?: number | null;
+  generationDurationMs?: number;
 }
 
 export type ExportImageNodeResultKind =
@@ -59,6 +69,17 @@ export type ExportImageNodeResultKind =
 
 export interface ExportImageNodeData extends NodeImageData {
   resultKind?: ExportImageNodeResultKind;
+}
+
+export interface ExportVideoNodeData extends NodeImageData {
+  mediaType?: MediaType;
+  videoUrl?: string | null;
+  videoDuration?: number;
+  isGenerating?: boolean;
+  generationStartedAt?: number | null;
+  generationDurationMs?: number;
+  generationError?: string | null;
+  generationErrorDetails?: string | null;
 }
 
 export interface GroupNodeData extends NodeDisplayData {
@@ -151,6 +172,26 @@ export interface AiChatNodeData extends NodeDisplayData {
   systemPrompt?: string;
 }
 
+export type VideoGenerationMode = 'text-to-video' | 'image-to-video' | 'start-end-to-video' | 'reference-to-video';
+
+// User-selectable generation mode (simplified)
+export type UserVideoGenerationMode = 'start-end' | 'reference';
+
+export interface AiVideoNodeData extends NodeDisplayData {
+  prompt: string;
+  model: string;
+  duration: number;
+  aspectRatio: string;
+  resolution: string;
+  outputAudio: boolean;
+  userGenerationMode: UserVideoGenerationMode;
+  extraParams?: Record<string, unknown>;
+  isGenerating?: boolean;
+  generationStartedAt?: number | null;
+  generationDurationMs?: number;
+  videoUrl?: string | null;
+}
+
 export type CanvasNodeData =
   | UploadImageNodeData
   | ExportImageNodeData
@@ -159,7 +200,9 @@ export type CanvasNodeData =
   | ImageEditNodeData
   | StoryboardSplitNodeData
   | StoryboardGenNodeData
-  | AiChatNodeData;
+  | AiChatNodeData
+  | AiVideoNodeData
+  | ExportVideoNodeData;
 
 export type CanvasNode = Node<CanvasNodeData, CanvasNodeType>;
 export type CanvasEdge = Edge;
@@ -238,6 +281,12 @@ export function isAiChatNode(
   return node?.type === CANVAS_NODE_TYPES.aiChat;
 }
 
+export function isExportVideoNode(
+  node: CanvasNode | null | undefined
+): node is Node<ExportVideoNodeData, typeof CANVAS_NODE_TYPES.exportVideo> {
+  return node?.type === CANVAS_NODE_TYPES.exportVideo;
+}
+
 export function nodeHasImage(node: CanvasNode | null | undefined): boolean {
   if (!node) {
     return false;
@@ -245,6 +294,10 @@ export function nodeHasImage(node: CanvasNode | null | undefined): boolean {
 
   if (isUploadNode(node) || isImageEditNode(node) || isExportImageNode(node)) {
     return Boolean(node.data.imageUrl);
+  }
+
+  if (isExportVideoNode(node)) {
+    return Boolean(node.data.imageUrl) || Boolean(node.data.videoUrl);
   }
 
   if (isStoryboardSplitNode(node)) {

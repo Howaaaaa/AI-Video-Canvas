@@ -331,7 +331,8 @@ function getNodeSize(node: CanvasNode): { width: number; height: number } {
 function isImageAutoResizableType(type: CanvasNodeType): boolean {
   return type === CANVAS_NODE_TYPES.upload
     || type === CANVAS_NODE_TYPES.imageEdit
-    || type === CANVAS_NODE_TYPES.exportImage;
+    || type === CANVAS_NODE_TYPES.exportImage
+    || type === CANVAS_NODE_TYPES.exportVideo;
 }
 
 function withManualSizeLock(node: CanvasNode): CanvasNode {

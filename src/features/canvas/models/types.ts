@@ -59,3 +59,35 @@ export interface ImageModelDefinition {
     modeLabel: string;
   };
 }
+
+export interface DurationOption {
+  value: number;
+  label: string;
+}
+
+export interface VideoOperationOption {
+  value: string;
+  label: string;
+}
+
+export interface VideoModelDefinition {
+  id: string;
+  mediaType: 'video';
+  displayName: string;
+  providerId: string;
+  description: string;
+  eta: string;
+  expectedDurationMs?: number;
+  defaultAspectRatio: string;
+  defaultDuration: number;
+  aspectRatios: AspectRatioOption[];
+  durations: DurationOption[];
+  resolutions: ResolutionOption[];
+  extraParamsSchema?: ExtraParamDefinition[];
+  defaultExtraParams?: Record<string, unknown>;
+  operations: VideoOperationOption[];
+  resolveRequest: (context: { referenceImageCount: number }) => {
+    requestModel: string;
+    modeLabel: string;
+  };
+}
