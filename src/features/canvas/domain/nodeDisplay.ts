@@ -6,7 +6,7 @@ import {
 } from './canvasNodes';
 
 export const DEFAULT_NODE_DISPLAY_NAME: Record<CanvasNodeType, string> = {
-  [CANVAS_NODE_TYPES.upload]: '上传图片',
+  [CANVAS_NODE_TYPES.upload]: '上传',
   [CANVAS_NODE_TYPES.imageEdit]: 'AI 图片',
   [CANVAS_NODE_TYPES.exportImage]: '结果图片',
   [CANVAS_NODE_TYPES.textAnnotation]: '文本注释',
@@ -14,6 +14,8 @@ export const DEFAULT_NODE_DISPLAY_NAME: Record<CanvasNodeType, string> = {
   [CANVAS_NODE_TYPES.storyboardSplit]: '切割结果',
   [CANVAS_NODE_TYPES.storyboardGen]: '分镜生成',
   [CANVAS_NODE_TYPES.aiChat]: 'AI 对话',
+  [CANVAS_NODE_TYPES.aiVideo]: 'AI 视频',
+  [CANVAS_NODE_TYPES.exportVideo]: '结果视频',
 };
 
 export const EXPORT_RESULT_DISPLAY_NAME: Record<ExportImageNodeResultKind, string> = {

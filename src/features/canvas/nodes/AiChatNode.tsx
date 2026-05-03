@@ -31,6 +31,14 @@ import {
   resolveReferenceAwareDeleteRange,
 } from '@/features/canvas/application/referenceTokenEditing';
 import {
+  PICKER_FALLBACK_ANCHOR,
+  renderPromptWithHighlights,
+  resolvePickerAnchor,
+  type PickerAnchor,
+} from '@/features/canvas/application/referenceTokenUi';
+import {
+  NODE_CONTROL_CHIP_CLASS,
+  NODE_CONTROL_ICON_CLASS,
   NODE_CONTROL_MODEL_CHIP_CLASS,
   NODE_CONTROL_PRIMARY_BUTTON_CLASS,
 } from '@/features/canvas/ui/nodeControlStyles';
@@ -76,81 +84,12 @@ type AiChatNodeProps = NodeProps & {
   selected?: boolean;
 };
 
-interface PickerAnchor {
-  left: number;
-  top: number;
-}
-
-const PICKER_FALLBACK_ANCHOR: PickerAnchor = { left: 8, top: 8 };
-const PICKER_Y_OFFSET_PX = 20;
-const AI_CHAT_NODE_MIN_WIDTH = 500;
+const AI_CHAT_NODE_MIN_WIDTH = 600;
 const AI_CHAT_NODE_MIN_HEIGHT = 300;
 const AI_CHAT_NODE_MAX_WIDTH = 1200;
 const AI_CHAT_NODE_MAX_HEIGHT = 600;
 const AI_CHAT_NODE_DEFAULT_WIDTH = 500;
 const AI_CHAT_NODE_DEFAULT_HEIGHT = 300;
-
-function getTextareaCaretOffset(
-  textarea: HTMLTextAreaElement,
-  caretIndex: number
-): PickerAnchor {
-  const mirror = document.createElement('div');
-  const computed = window.getComputedStyle(textarea);
-  const mirrorStyle = mirror.style;
-
-  mirrorStyle.position = 'absolute';
-  mirrorStyle.visibility = 'hidden';
-  mirrorStyle.pointerEvents = 'none';
-  mirrorStyle.whiteSpace = 'pre-wrap';
-  mirrorStyle.overflowWrap = 'break-word';
-  mirrorStyle.wordBreak = 'break-word';
-  mirrorStyle.boxSizing = computed.boxSizing;
-  mirrorStyle.width = `${textarea.clientWidth}px`;
-  mirrorStyle.font = computed.font;
-  mirrorStyle.lineHeight = computed.lineHeight;
-  mirrorStyle.letterSpacing = computed.letterSpacing;
-  mirrorStyle.padding = computed.padding;
-  mirrorStyle.border = computed.border;
-  mirrorStyle.textTransform = computed.textTransform;
-  mirrorStyle.textIndent = computed.textIndent;
-
-  mirror.textContent = textarea.value.slice(0, caretIndex);
-
-  const marker = document.createElement('span');
-  marker.textContent = textarea.value.slice(caretIndex, caretIndex + 1) || ' ';
-  mirror.appendChild(marker);
-
-  document.body.appendChild(mirror);
-
-  const left = marker.offsetLeft - textarea.scrollLeft;
-  const top = marker.offsetTop - textarea.scrollTop;
-
-  document.body.removeChild(mirror);
-
-  return {
-    left: Math.max(0, left),
-    top: Math.max(0, top),
-  };
-}
-
-function resolvePickerAnchor(
-  container: HTMLDivElement | null,
-  textarea: HTMLTextAreaElement,
-  caretIndex: number
-): PickerAnchor {
-  if (!container) {
-    return PICKER_FALLBACK_ANCHOR;
-  }
-
-  const containerRect = container.getBoundingClientRect();
-  const textareaRect = textarea.getBoundingClientRect();
-  const caretOffset = getTextareaCaretOffset(textarea, caretIndex);
-
-  return {
-    left: Math.max(0, textareaRect.left - containerRect.left + caretOffset.left),
-    top: Math.max(0, textareaRect.top - containerRect.top + caretOffset.top + PICKER_Y_OFFSET_PX),
-  };
-}
 
 export const AiChatNode = memo(({ id, data, selected, width, height }: AiChatNodeProps) => {
   const { t } = useTranslation();
@@ -158,6 +97,7 @@ export const AiChatNode = memo(({ id, data, selected, width, height }: AiChatNod
 
   const rootRef = useRef<HTMLDivElement>(null);
   const promptRef = useRef<HTMLTextAreaElement>(null);
+  const promptHighlightRef = useRef<HTMLDivElement>(null);
   const [promptDraft, setPromptDraft] = useState(() => data.prompt ?? '');
   const promptDraftRef = useRef(promptDraft);
   const [showImagePicker, setShowImagePicker] = useState(false);
@@ -253,6 +193,12 @@ export const AiChatNode = memo(({ id, data, selected, width, height }: AiChatNod
     setDefaultPromptDraft(nextPrompt);
     updateNodeData(id, { defaultPrompt: nextPrompt });
   }, [id, updateNodeData]);
+
+  const syncPromptHighlightScroll = () => {
+    if (!promptRef.current || !promptHighlightRef.current) return;
+    promptHighlightRef.current.scrollTop = promptRef.current.scrollTop;
+    promptHighlightRef.current.scrollLeft = promptRef.current.scrollLeft;
+  };
 
   const commitPromptDraft = useCallback((nextPrompt: string) => {
     promptDraftRef.current = nextPrompt;
@@ -381,6 +327,7 @@ export const AiChatNode = memo(({ id, data, selected, width, height }: AiChatNod
     requestAnimationFrame(() => {
       promptRef.current?.focus();
       promptRef.current?.setSelectionRange(nextCursor, nextCursor);
+      syncPromptHighlightScroll();
     });
   }, [commitPromptDraft, pickerCursor]);
 
@@ -405,6 +352,7 @@ export const AiChatNode = memo(({ id, data, selected, width, height }: AiChatNod
         requestAnimationFrame(() => {
           promptRef.current?.focus();
           promptRef.current?.setSelectionRange(nextCursor, nextCursor);
+          syncPromptHighlightScroll();
         });
         return;
       }
@@ -478,19 +426,34 @@ export const AiChatNode = memo(({ id, data, selected, width, height }: AiChatNod
 
       {/* 输入区域 */}
       <div className="relative min-h-0 flex-1 rounded-lg border border-[rgba(255,255,255,0.1)] bg-bg-dark/45 p-2 mb-2">
-        <textarea
-          ref={promptRef}
-          value={promptDraft}
-          onChange={(event) => {
-            const nextValue = event.target.value;
-            setPromptDraft(nextValue);
-            commitPromptDraft(nextValue);
-          }}
-          onKeyDown={handlePromptKeyDown}
-          onMouseDown={(event) => event.stopPropagation()}
-          placeholder={t('node.aiChat.promptPlaceholder')}
-          className="ui-scrollbar nodrag nowheel h-full w-full resize-none overflow-y-auto overflow-x-hidden border-none bg-transparent px-1 py-0.5 text-sm leading-6 text-text-dark outline-none placeholder:text-text-muted/80 focus:border-transparent whitespace-pre-wrap break-words"
-        />
+        <div className="relative h-full min-h-0">
+          <div
+            ref={promptHighlightRef}
+            aria-hidden="true"
+            className="ui-scrollbar pointer-events-none absolute inset-0 overflow-y-auto overflow-x-hidden text-sm leading-6 text-text-dark"
+            style={{ scrollbarGutter: 'stable' }}
+          >
+            <div className="min-h-full whitespace-pre-wrap break-words px-1 py-0.5">
+              {renderPromptWithHighlights(promptDraft, incomingImages.length)}
+            </div>
+          </div>
+
+          <textarea
+            ref={promptRef}
+            value={promptDraft}
+            onChange={(event) => {
+              const nextValue = event.target.value;
+              setPromptDraft(nextValue);
+              commitPromptDraft(nextValue);
+            }}
+            onKeyDown={handlePromptKeyDown}
+            onScroll={syncPromptHighlightScroll}
+            onMouseDown={(event) => event.stopPropagation()}
+            placeholder={t('node.aiChat.promptPlaceholder')}
+            className="ui-scrollbar nodrag nowheel relative z-10 h-full w-full resize-none overflow-y-auto overflow-x-hidden border-none bg-transparent px-1 py-0.5 text-sm leading-6 text-transparent caret-text-dark outline-none placeholder:text-text-muted/80 focus:border-transparent whitespace-pre-wrap break-words"
+            style={{ scrollbarGutter: 'stable' }}
+          />
+        </div>
 
         {showImagePicker && incomingImageItems.length > 0 && (
           <div
@@ -605,7 +568,7 @@ export const AiChatNode = memo(({ id, data, selected, width, height }: AiChatNod
         <div ref={modelTriggerRef} className="relative flex">
           <UiChipButton
             title={t('modelParams.model')}
-            className={NODE_CONTROL_MODEL_CHIP_CLASS}
+            className={`${NODE_CONTROL_CHIP_CLASS} ${NODE_CONTROL_MODEL_CHIP_CLASS}`}
             onClick={(event) => {
               event.stopPropagation();
               setPanelProviderId(selectedModel.providerId);
@@ -628,9 +591,9 @@ export const AiChatNode = memo(({ id, data, selected, width, height }: AiChatNod
           className={`shrink-0 ${NODE_CONTROL_PRIMARY_BUTTON_CLASS}`}
         >
           {isLoading ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
+            <Loader2 className={`${NODE_CONTROL_ICON_CLASS} animate-spin`} />
           ) : (
-            <MessageSquare className="w-4 h-4" />
+            <MessageSquare className={NODE_CONTROL_ICON_CLASS} />
           )}
           {isLoading ? t('node.aiChat.sending') : t('node.aiChat.send')}
         </UiButton>

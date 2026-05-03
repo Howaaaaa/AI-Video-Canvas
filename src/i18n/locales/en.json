@@ -82,16 +82,20 @@
     "thinkingLevelDesc": "Only applies to fal Nano Banana 2. High thinking adds extra cost.",
     "thinkingDisabled": "Off",
     "thinkingMinimal": "Standard",
-    "thinkingHigh": "High"
+    "thinkingHigh": "High",
+    "audio": "Audio",
+    "bgm": "BGM",
+    "outputAudio": "Generate Audio"
   },
   "node": {
     "menu": {
-      "uploadImage": "Upload Image",
+      "uploadImage": "Upload",
       "aiImageGeneration": "AI Image",
       "storyboard": "Storyboard Node",
       "storyboardGen": "Storyboard Generation",
       "textAnnotation": "Text Annotation",
-      "aiChat": "AI Chat"
+      "aiChat": "AI Chat",
+      "aiVideo": "AI Video"
     },
     "imageNode": {
       "title": "Image Node",
@@ -157,6 +161,23 @@
       "error": "Chat error",
       "imageRef": "Reference Image",
       "template": "Template"
+    },
+    "aiVideo": {
+      "promptRequired": "Please enter a video description",
+      "apiKeyRequired": "Please set LemonData API key in Settings",
+      "promptPlaceholder": "Describe the video you want to generate...",
+      "duration": "Duration",
+      "aspectRatio": "Ratio",
+      "resolution": "Resolution",
+      "audio": "Audio",
+        "generationMode": "Generation Mode",
+        "audioOn": "On",
+        "audioOff": "Off",
+      "textToVideo": "Text to Video",
+      "imageToVideo": "Image to Video",
+      "startEndToVideo": "Start-End Frames",
+      "referenceToVideo": "Reference Images",
+      "generating": "Generating..."
     }
   },
   "viewer": {

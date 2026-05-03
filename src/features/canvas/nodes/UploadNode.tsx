@@ -16,7 +16,7 @@ import {
   useViewport,
   type NodeProps,
 } from '@xyflow/react';
-import { Upload } from 'lucide-react';
+import { Upload, Film } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import {
@@ -24,6 +24,7 @@ import {
   EXPORT_RESULT_NODE_MIN_HEIGHT,
   EXPORT_RESULT_NODE_MIN_WIDTH,
   type UploadImageNodeData,
+  type MediaType,
 } from '@/features/canvas/domain/canvasNodes';
 import {
   resolveMinEdgeFittedSize,
@@ -42,6 +43,9 @@ import {
   resolveImageSourceByZoom,
 } from '@/features/canvas/application/imageData';
 import { CanvasNodeImage } from '@/features/canvas/ui/CanvasNodeImage';
+import { CanvasNodeVideo, VideoProgressBar } from '@/features/canvas/ui/VideoPlayer';
+import { prepareNodeVideoBinary } from '@/commands/video';
+import { prepareNodeImageBinary } from '@/commands/image';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 
@@ -59,25 +63,73 @@ function resolveNodeDimension(value: number | undefined, fallback: number): numb
 }
 
 function resolveDroppedImageFile(event: DragEvent<HTMLElement>): File | null {
-  const directFile = event.dataTransfer.files?.[0];
-  if (directFile) {
-    return directFile;
+  if (event.dataTransfer.files.length > 0) {
+    const first = event.dataTransfer.files[0];
+    if (first.type.startsWith('image/') || first.type.startsWith('video/')) {
+      return first;
+    }
   }
-
   const item = Array.from(event.dataTransfer.items || []).find(
-    (candidate) => candidate.kind === 'file' && candidate.type.startsWith('image/')
+    (candidate) => candidate.kind === 'file' && (candidate.type.startsWith('image/') || candidate.type.startsWith('video/'))
   );
   return item?.getAsFile() ?? null;
 }
+
+
+const GeneratingIndicator = memo(({ startedAt, durationMs }: { startedAt: number | null; durationMs: number }) => {
+  const [progress, setProgress] = useState(0);
+
+  useEffect(() => {
+    if (!startedAt) {
+      setProgress(0);
+      return;
+    }
+    const tick = () => {
+      const elapsed = Date.now() - startedAt;
+      const pct = Math.min((elapsed / durationMs) * 100, 95);
+      setProgress(pct);
+    };
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [startedAt, durationMs]);
+
+  const elapsed = startedAt ? Math.round((Date.now() - startedAt) / 1000) : 0;
+  const minutes = Math.floor(elapsed / 60);
+  const seconds = elapsed % 60;
+
+  return (
+    <div className="flex h-full w-full flex-col items-center justify-center gap-3 rounded-[var(--node-radius)] bg-bg-dark px-4">
+      <div className="h-6 w-6 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+      <div className="flex flex-col items-center gap-1 text-text-muted">
+        <Film className="h-4 w-4" />
+        <span className="text-xs">
+          {minutes > 0 ? `${minutes}:${String(seconds).padStart(2, '0')}` : `${seconds}s`}
+        </span>
+      </div>
+      <div className="h-1 w-3/4 overflow-hidden rounded-full bg-white/10">
+        <div
+          className="h-full rounded-full bg-accent transition-all duration-1000 ease-linear"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+    </div>
+  );
+});
+
+GeneratingIndicator.displayName = 'GeneratingIndicator';
 
 export const UploadNode = memo(({ id, data, selected, width, height }: UploadNodeProps) => {
   const { t } = useTranslation();
   const updateNodeInternals = useUpdateNodeInternals();
   const setSelectedNode = useCanvasStore((state) => state.setSelectedNode);
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
+  const addNode = useCanvasStore((state) => state.addNode);
+  const connectNodes = useCanvasStore((state) => state.onConnect);
   const useUploadFilenameAsNodeTitle = useSettingsStore((state) => state.useUploadFilenameAsNodeTitle);
   const { zoom } = useViewport();
   const inputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const uploadSequenceRef = useRef(0);
   const uploadPerfRef = useRef<{
     sequence: number;
@@ -125,6 +177,31 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
 
   const processFile = useCallback(
     async (file: File) => {
+      if (file.type.startsWith('video/')) {
+        const started = performance.now();
+        const ext = (file.name.split('.').pop() || '').toLowerCase();
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        const videoUrl = await prepareNodeVideoBinary(bytes, ext || undefined);
+        console.info(
+          `[upload-perf][video] processFile persisted nodeId=${id} name="${file.name}" size=${file.size}B elapsed=${Math.round(performance.now() - started)}ms`
+        );
+        const nextData: Partial<UploadImageNodeData> = {
+          mediaType: 'video',
+          videoUrl,
+          videoDuration: undefined,
+          aspectRatio: '16:9',
+          sourceFileName: file.name,
+          imageUrl: null,
+          previewImageUrl: null,
+          tinyPreviewImageUrl: null,
+        };
+        if (useUploadFilenameAsNodeTitle) {
+          nextData.displayName = file.name;
+        }
+        updateNodeData(id, nextData);
+        return;
+      }
+
       const sequence = uploadSequenceRef.current + 1;
       uploadSequenceRef.current = sequence;
       const started = performance.now();
@@ -232,7 +309,7 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
       event.preventDefault();
       event.stopPropagation();
       const file = resolveDroppedImageFile(event);
-      if (!file || !file.type.startsWith('image/')) {
+      if (!file || (!file.type.startsWith('image/') && !file.type.startsWith('video/'))) {
         return;
       }
 
@@ -249,7 +326,7 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
   const handleFileChange = useCallback(
     async (event: ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
-      if (!file || !file.type.startsWith('image/')) {
+      if (!file || (!file.type.startsWith('image/') && !file.type.startsWith('video/'))) {
         return;
       }
 
@@ -258,6 +335,58 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
     },
     [processFile]
   );
+
+  const handleNodeClick = useCallback(() => {
+    if (!data.imageUrl && !data.videoUrl && !transientPreviewUrl) {
+      inputRef.current?.click();
+      return;
+    }
+    setSelectedNode(id);
+  }, [data.imageUrl, data.videoUrl, id, setSelectedNode, transientPreviewUrl]);
+
+  const handleCaptureFrame = useCallback(async () => {
+    const video = videoRef.current;
+    if (!video || !video.videoWidth || !video.videoHeight) return;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, 'image/png')
+    );
+    if (!blob) return;
+
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    const prepared = await prepareNodeImageBinary(bytes, 'png');
+
+    const currentNodes = useCanvasStore.getState().nodes;
+    const sourceNode = currentNodes.find((n) => n.id === id);
+    const offsetX = (sourceNode?.measured?.width ?? 300) + 40;
+    const newNodeId = addNode(
+      CANVAS_NODE_TYPES.exportImage,
+      {
+        x: (sourceNode?.position.x ?? 0) + offsetX,
+        y: sourceNode?.position.y ?? 0,
+      },
+      {
+        imageUrl: prepared.imagePath,
+        previewImageUrl: prepared.previewImagePath,
+        tinyPreviewImageUrl: prepared.tinyPreviewImagePath,
+        aspectRatio: prepared.aspectRatio ?? '16:9',
+        mediaType: 'image',
+      }
+    );
+    connectNodes({
+      source: id,
+      target: newNodeId,
+      sourceHandle: 'source',
+      targetHandle: 'target',
+    });
+  }, [addNode, connectNodes, id]);
 
   useEffect(() => {
     return canvasEventBus.subscribe('upload-node/reupload', ({ nodeId }) => {
@@ -270,19 +399,12 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
 
   useEffect(() => {
     return canvasEventBus.subscribe('upload-node/paste-image', ({ nodeId, file }) => {
-      if (nodeId !== id || !file.type.startsWith('image/')) {
+      if (nodeId !== id) {
         return;
       }
       void processFile(file);
     });
   }, [id, processFile]);
-
-  const handleNodeClick = useCallback(() => {
-    setSelectedNode(id);
-    if (!data.imageUrl && !transientPreviewUrl) {
-      inputRef.current?.click();
-    }
-  }, [data.imageUrl, id, setSelectedNode, transientPreviewUrl]);
 
   useEffect(() => () => {
     uploadPerfRef.current = null;
@@ -300,6 +422,11 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
       data.tinyPreviewImageUrl,
     );
   }, [data.imageUrl, data.previewImageUrl, data.tinyPreviewImageUrl, transientPreviewUrl, zoom]);
+
+  // Determine media type
+  const mediaType: MediaType = data.mediaType ?? 'image';
+  const hasContent = data.imageUrl || data.videoUrl || transientPreviewUrl;
+  const isGenerating = data.isGenerating ?? false;
 
   useEffect(() => {
     updateNodeInternals(id);
@@ -326,17 +453,33 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
         onTitleChange={(nextTitle) => updateNodeData(id, { displayName: nextTitle })}
       />
 
-      {data.imageUrl || transientPreviewUrl ? (
+      {isGenerating ? (
+        <GeneratingIndicator
+          startedAt={data.generationStartedAt ?? null}
+          durationMs={data.generationDurationMs ?? 180000}
+        />
+      ) : hasContent ? (
         <div
-          className="block h-full w-full overflow-hidden rounded-[var(--node-radius)] bg-bg-dark"
+          className="flex flex-col h-full w-full overflow-hidden rounded-[var(--node-radius)] bg-bg-dark"
         >
-          <CanvasNodeImage
-            src={imageSource ?? ''}
-            viewerSourceUrl={data.imageUrl ? resolveImageDisplayUrl(data.imageUrl) : null}
-            alt={t('node.upload.uploadedAlt')}
-            className="h-full w-full object-contain"
-            onLoad={handleImageLoad}
-          />
+          {mediaType === 'video' && data.videoUrl ? (
+            <>
+              <CanvasNodeVideo
+                ref={videoRef}
+                src={resolveImageDisplayUrl(data.videoUrl)}
+                className="flex-1 w-full min-h-0"
+              />
+              <VideoProgressBar videoRef={videoRef} onCapture={handleCaptureFrame} />
+            </>
+          ) : (
+            <CanvasNodeImage
+              src={imageSource ?? ''}
+              viewerSourceUrl={data.imageUrl ? resolveImageDisplayUrl(data.imageUrl) : null}
+              alt={t('node.upload.uploadedAlt')}
+              className="h-full w-full object-contain"
+              onLoad={handleImageLoad}
+            />
+          )}
         </div>
       ) : (
         <label
@@ -351,7 +494,7 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
       <input
         ref={inputRef}
         type="file"
-        accept="image/*"
+        accept="image/*,video/*"
         className="hidden"
         onChange={handleFileChange}
       />
