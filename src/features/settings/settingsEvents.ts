@@ -1,5 +1,6 @@
 export type SettingsCategory =
   | 'providers'
+  | 'storage'
   | 'pricing'
   | 'appearance'
   | 'general'

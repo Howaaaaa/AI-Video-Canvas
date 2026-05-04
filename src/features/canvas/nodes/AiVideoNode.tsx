@@ -49,6 +49,7 @@ import {
   type ModelProviderDefinition,
 } from '@/features/canvas/models';
 import { generateVideo } from '@/commands/ai';
+import { setCosConfig } from '@/commands/cos';
 import {
   NODE_CONTROL_CHIP_CLASS,
   NODE_CONTROL_ICON_CLASS,
@@ -165,6 +166,7 @@ export const AiVideoNode = memo(({ id, data, selected, width, height }: AiVideoN
   const addEdge = useCanvasStore((state) => state.addEdge);
   const findNodePosition = useCanvasStore((state) => state.findNodePosition);
   const apiKeys = useSettingsStore((state) => state.apiKeys);
+  const cosConfig = useSettingsStore((state) => state.cosConfig);
 
   const incomingImages = useMemo(
     () => graphImageResolver.collectInputImages(id, nodes, edges),
@@ -414,6 +416,7 @@ export const AiVideoNode = memo(({ id, data, selected, width, height }: AiVideoN
 
     try {
       await canvasAiGateway.setApiKey(selectedModel.providerId, providerApiKey);
+      await setCosConfig(cosConfig);
 
       const result = await generateVideo({
         prompt,

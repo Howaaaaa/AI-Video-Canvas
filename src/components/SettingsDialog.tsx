@@ -7,7 +7,8 @@ import remarkBreaks from 'remark-breaks';
 import { getVersion } from '@tauri-apps/api/app';
 import { open } from '@tauri-apps/plugin-dialog';
 import { openUrl } from '@tauri-apps/plugin-opener';
-import { useSettingsStore } from '@/stores/settingsStore';
+import { useSettingsStore, type CosConfig } from '@/stores/settingsStore';
+import { setCosConfig } from '@/commands/cos';
 import { UiCheckbox, UiSelect } from '@/components/ui';
 import { UI_CONTENT_OVERLAY_INSET_CLASS, UI_DIALOG_TRANSITION_MS } from '@/components/ui/motion';
 import { useDialogTransition } from '@/components/ui/useDialogTransition';
@@ -89,6 +90,7 @@ export function SettingsDialog({
   const { t, i18n } = useTranslation();
   const {
     apiKeys,
+    cosConfig,
     grsaiNanoBananaProModel,
     hideProviderGuidePopover,
     downloadPresetPaths,
@@ -111,6 +113,7 @@ export function SettingsDialog({
     autoCheckAppUpdateOnLaunch,
     enableUpdateDialog,
     setProviderApiKey,
+    setCosConfig: storeSetCosConfig,
     setGrsaiNanoBananaProModel,
     setDownloadPresetPaths,
     setUseUploadFilenameAsNodeTitle,
@@ -144,6 +147,7 @@ export function SettingsDialog({
   const [activeCategory, setActiveCategory] = useState<SettingsCategory>(initialCategory);
   const [appVersion, setAppVersion] = useState<string>('');
   const [localApiKeys, setLocalApiKeys] = useState<Record<string, string>>(apiKeys);
+  const [localCosConfig, setLocalCosConfig] = useState<CosConfig>(cosConfig);
   const [localGrsaiNanoBananaProModel, setLocalGrsaiNanoBananaProModel] = useState(
     grsaiNanoBananaProModel
   );
@@ -212,6 +216,7 @@ export function SettingsDialog({
       return;
     }
     setLocalApiKeys(apiKeys);
+    setLocalCosConfig(cosConfig);
     setLocalDownloadPresetPaths(downloadPresetPaths);
     setLocalGrsaiNanoBananaProModel(grsaiNanoBananaProModel);
     setLocalUseUploadFilenameAsNodeTitle(useUploadFilenameAsNodeTitle);
@@ -251,6 +256,8 @@ export function SettingsDialog({
     providers.forEach((provider) => {
       setProviderApiKey(provider.id, localApiKeys[provider.id] ?? '');
     });
+    storeSetCosConfig(localCosConfig);
+    void setCosConfig(localCosConfig);
     setGrsaiNanoBananaProModel(localGrsaiNanoBananaProModel);
     setDownloadPresetPaths(localDownloadPresetPaths);
     setUseUploadFilenameAsNodeTitle(localUseUploadFilenameAsNodeTitle);
@@ -274,6 +281,7 @@ export function SettingsDialog({
     onClose();
   }, [
     localApiKeys,
+    localCosConfig,
     localDownloadPresetPaths,
     localGrsaiNanoBananaProModel,
     localUseUploadFilenameAsNodeTitle,
@@ -296,6 +304,7 @@ export function SettingsDialog({
     localEnableUpdateDialog,
     providers,
     setProviderApiKey,
+    storeSetCosConfig,
     setGrsaiNanoBananaProModel,
     setDownloadPresetPaths,
     setUseUploadFilenameAsNodeTitle,
@@ -429,6 +438,20 @@ export function SettingsDialog({
               `}
               >
                 <span className="text-sm">{t('settings.providers')}</span>
+              </button>
+
+              <button
+                onClick={() => setActiveCategory('storage')}
+                className={`
+                w-full flex items-center gap-3 px-4 py-2.5 text-left
+                transition-colors
+                ${activeCategory === 'storage'
+                    ? 'bg-accent/10 text-text-dark border-l-2 border-accent'
+                    : 'text-text-muted hover:bg-bg-dark hover:text-text-dark'
+                  }
+              `}
+              >
+                <span className="text-sm">{t('settings.storage')}</span>
               </button>
 
               <button
@@ -608,6 +631,96 @@ export function SettingsDialog({
                       </div>
                     );
                   })}
+                </div>
+
+                <div className="px-6 py-4 border-t border-border-dark flex justify-end">
+                  <button
+                    onClick={handleSave}
+                    className="px-4 py-2 text-sm font-medium bg-accent text-white rounded
+                             hover:bg-accent/80 transition-colors"
+                  >
+                    {t('common.save')}
+                  </button>
+                </div>
+              </>
+            )}
+
+            {activeCategory === 'storage' && (
+              <>
+                <div className="px-6 py-5 border-b border-border-dark">
+                  <h2 className="text-lg font-semibold text-text-dark">
+                    {t('settings.storage')}
+                  </h2>
+                  <p className="text-sm text-text-muted mt-1">
+                    {t('settings.storageDesc')}
+                  </p>
+                </div>
+
+                <div className="ui-scrollbar flex-1 space-y-4 overflow-y-auto p-6">
+                  <div className="rounded-lg border border-border-dark bg-bg-dark p-4">
+                    <p className="text-xs text-text-muted mb-4 leading-5">
+                      {t('settings.storageCosNote')}
+                    </p>
+
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-xs font-medium text-text-dark mb-1">
+                          {t('settings.cosSecretId')}
+                        </label>
+                        <input
+                          value={localCosConfig.secretId}
+                          onChange={(event) =>
+                            setLocalCosConfig((prev) => ({ ...prev, secretId: event.target.value }))
+                          }
+                          placeholder={t('settings.cosSecretIdPlaceholder')}
+                          className="w-full rounded border border-border-dark bg-surface-dark px-3 py-2 text-sm text-text-dark placeholder:text-text-muted"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-text-dark mb-1">
+                          {t('settings.cosSecretKey')}
+                        </label>
+                        <input
+                          type="password"
+                          value={localCosConfig.secretKey}
+                          onChange={(event) =>
+                            setLocalCosConfig((prev) => ({ ...prev, secretKey: event.target.value }))
+                          }
+                          placeholder={t('settings.cosSecretKeyPlaceholder')}
+                          className="w-full rounded border border-border-dark bg-surface-dark px-3 py-2 text-sm text-text-dark placeholder:text-text-muted"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-text-dark mb-1">
+                          {t('settings.cosRegion')}
+                        </label>
+                        <input
+                          value={localCosConfig.region}
+                          onChange={(event) =>
+                            setLocalCosConfig((prev) => ({ ...prev, region: event.target.value }))
+                          }
+                          placeholder={t('settings.cosRegionPlaceholder')}
+                          className="w-full rounded border border-border-dark bg-surface-dark px-3 py-2 text-sm text-text-dark placeholder:text-text-muted"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-text-dark mb-1">
+                          {t('settings.cosBucket')}
+                        </label>
+                        <input
+                          value={localCosConfig.bucket}
+                          onChange={(event) =>
+                            setLocalCosConfig((prev) => ({ ...prev, bucket: event.target.value }))
+                          }
+                          placeholder={t('settings.cosBucketPlaceholder')}
+                          className="w-full rounded border border-border-dark bg-surface-dark px-3 py-2 text-sm text-text-dark placeholder:text-text-muted"
+                        />
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="px-6 py-4 border-t border-border-dark flex justify-end">

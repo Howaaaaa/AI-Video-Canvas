@@ -13,9 +13,24 @@ export type CanvasEdgeRoutingMode = 'spline' | 'orthogonal' | 'smartOrthogonal';
 export type ProviderApiKeys = Record<string, string>;
 export const DEFAULT_GRSAI_NANO_BANANA_PRO_MODEL = 'nano-banana-pro';
 
+export interface CosConfig {
+  secretId: string;
+  secretKey: string;
+  region: string;
+  bucket: string;
+}
+
+export const COS_CONFIG_DEFAULTS: CosConfig = {
+  secretId: '',
+  secretKey: '',
+  region: 'ap-nanjing',
+  bucket: '',
+};
+
 interface SettingsState {
   isHydrated: boolean;
   apiKeys: ProviderApiKeys;
+  cosConfig: CosConfig;
   grsaiNanoBananaProModel: string;
   hideProviderGuidePopover: boolean;
   downloadPresetPaths: string[];
@@ -38,6 +53,7 @@ interface SettingsState {
   autoCheckAppUpdateOnLaunch: boolean;
   enableUpdateDialog: boolean;
   setProviderApiKey: (providerId: string, key: string) => void;
+  setCosConfig: (config: CosConfig) => void;
   setGrsaiNanoBananaProModel: (model: string) => void;
   setHideProviderGuidePopover: (hide: boolean) => void;
   setDownloadPresetPaths: (paths: string[]) => void;
@@ -73,6 +89,18 @@ function normalizeHexColor(input: string): string {
 
 function normalizeApiKey(input: string): string {
   return input.trim();
+}
+
+function normalizeCosConfig(input: CosConfig | null | undefined): CosConfig {
+  if (!input) {
+    return { ...COS_CONFIG_DEFAULTS };
+  }
+  return {
+    secretId: (input.secretId ?? '').trim(),
+    secretKey: (input.secretKey ?? '').trim(),
+    region: (input.region ?? '').trim() || COS_CONFIG_DEFAULTS.region,
+    bucket: (input.bucket ?? '').trim(),
+  };
 }
 
 function normalizePriceDisplayCurrencyMode(
@@ -163,6 +191,7 @@ export const useSettingsStore = create<SettingsState>()(
     (set) => ({
       isHydrated: false,
       apiKeys: {},
+      cosConfig: { ...COS_CONFIG_DEFAULTS },
       grsaiNanoBananaProModel: DEFAULT_GRSAI_NANO_BANANA_PRO_MODEL,
       hideProviderGuidePopover: false,
       downloadPresetPaths: [],
@@ -191,6 +220,10 @@ export const useSettingsStore = create<SettingsState>()(
             [providerId]: normalizeApiKey(key),
           },
         })),
+      setCosConfig: (config) =>
+        set({
+          cosConfig: normalizeCosConfig(config),
+        }),
       setGrsaiNanoBananaProModel: (model) =>
         set({
           grsaiNanoBananaProModel: normalizeGrsaiNanoBananaProModel(model),
@@ -236,7 +269,7 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: 'settings-storage',
-      version: 10,
+      version: 11,
       onRehydrateStorage: () => {
         return (_state, error) => {
           if (error) {
@@ -251,6 +284,7 @@ export const useSettingsStore = create<SettingsState>()(
         const state = (persistedState ?? {}) as {
           apiKey?: string;
           apiKeys?: ProviderApiKeys;
+          cosConfig?: CosConfig;
           ignoreAtTagWhenCopyingAndGenerating?: boolean;
           grsaiNanoBananaProModel?: string;
           hideProviderGuidePopover?: boolean;
@@ -275,6 +309,7 @@ export const useSettingsStore = create<SettingsState>()(
             ...(persistedState as object),
             isHydrated: true,
             apiKeys: migratedApiKeys,
+            cosConfig: normalizeCosConfig(state.cosConfig),
             ignoreAtTagWhenCopyingAndGenerating,
             grsaiNanoBananaProModel: normalizeGrsaiNanoBananaProModel(
               state.grsaiNanoBananaProModel
@@ -302,6 +337,7 @@ export const useSettingsStore = create<SettingsState>()(
           ...(persistedState as object),
           isHydrated: true,
           apiKeys: state.apiKey ? { ppio: normalizeApiKey(state.apiKey) } : {},
+          cosConfig: normalizeCosConfig(state.cosConfig),
           ignoreAtTagWhenCopyingAndGenerating,
           grsaiNanoBananaProModel: normalizeGrsaiNanoBananaProModel(
             state.grsaiNanoBananaProModel
