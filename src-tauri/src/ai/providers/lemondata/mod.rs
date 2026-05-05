@@ -142,14 +142,14 @@ impl AIProvider for LemonDataProvider {
     fn supports_model(&self, model: &str) -> bool {
         matches!(
             Self::sanitize_model(model).as_str(),
-            "seedance-2.0-fast" | "seedance-2.0" | "viduq3-turbo"
+            "seedance-2.0-fast" | "seedance-2.0" | "veo3.1-fast"
         )
     }
 
     fn list_models(&self) -> Vec<String> {
         vec![
             "lemondata/seedance-2.0-fast".to_string(),
-            "lemondata/viduq3-turbo".to_string(),
+            "lemondata/veo3.1-fast".to_string(),
         ]
     }
 
@@ -176,6 +176,8 @@ impl AIProvider for LemonDataProvider {
 
         let model = Self::sanitize_model(&request.model);
         let is_viduq = model == "viduq3-turbo";
+        let is_veo = model == "veo3.1-fast";
+        let use_short_image_fields = is_viduq || is_veo;
 
         // Get user generation mode from extra_params
         let user_mode = request
@@ -195,32 +197,25 @@ impl AIProvider for LemonDataProvider {
         let operation_str = Self::operation_to_str(operation);
 
         // Parse duration from extra_params or default to 5
-        let duration = request
+        let mut duration = request
             .extra_params
             .as_ref()
             .and_then(|params| params.get("duration"))
             .and_then(|raw| raw.as_u64())
             .unwrap_or(5) as i32;
 
-        // Parse output_audio from extra_params
+        // veo3.1-fast reference-to-video only supports 8s
+        if is_veo && operation == VideoOperation::ReferenceToVideo {
+            duration = 8;
+        }
+
+        // Parse output_audio from extra_params (default true for viduq3, false for seedance)
         let output_audio = request
             .extra_params
             .as_ref()
             .and_then(|params| params.get("output_audio"))
             .and_then(|raw| raw.as_bool())
-            .unwrap_or(false);
-
-        // Parse audio / bgm from extra_params (viduq3-turbo)
-        let audio_enabled = request
-            .extra_params
-            .as_ref()
-            .and_then(|params| params.get("audio"))
-            .and_then(|raw| raw.as_bool());
-        let bgm_enabled = request
-            .extra_params
-            .as_ref()
-            .and_then(|params| params.get("bgm"))
-            .and_then(|raw| raw.as_bool());
+            .unwrap_or(use_short_image_fields);
 
         // Parse resolution from extra_params
         let resolution = request
@@ -230,61 +225,100 @@ impl AIProvider for LemonDataProvider {
             .and_then(|raw| raw.as_str())
             .unwrap_or("480p");
 
-        let mut body = json!({
-            "model": model,
-            "operation": operation_str,
-            "prompt": request.prompt,
-            "duration": duration,
-            "aspect_ratio": request.aspect_ratio,
-            "resolution": resolution,
-            "watermark": false,
-        });
+        // Build request body — veo3.1-fast has a different schema (no operation, no watermark)
+        let mut body = if is_veo {
+            json!({
+                "model": model,
+                "prompt": request.prompt,
+                "duration": duration,
+                "aspect_ratio": request.aspect_ratio,
+                "resolution": resolution,
+            })
+        } else {
+            json!({
+                "model": model,
+                "operation": operation_str,
+                "prompt": request.prompt,
+                "duration": duration,
+                "aspect_ratio": request.aspect_ratio,
+                "resolution": resolution,
+                "watermark": false,
+            })
+        };
 
-        if is_viduq {
-            if let Some(audio) = audio_enabled {
-                body["audio"] = json!(audio);
-            }
-            if let Some(bgm) = bgm_enabled {
-                body["bgm"] = json!(bgm);
-            }
+        if is_veo {
+            body["generate_audio"] = json!(output_audio);
         } else {
             body["output_audio"] = json!(output_audio);
         }
 
         // Upload images to COS and add to request
-        // viduq3 uses "image"/"end_image"; seedance uses "image_url"/"end_image_url"/"image_urls"
-        let (image_key, end_image_key, reference_key) = if is_viduq {
-            ("image", "end_image", None)
-        } else {
-            ("image_url", "end_image_url", Some("image_urls"))
-        };
-
         if image_count > 0 {
-            match operation {
-                VideoOperation::ImageToVideo => {
-                    let cos_url = self.upload_image_to_cos(&reference_images[0]).await?;
-                    body[image_key] = json!(cos_url);
-                }
-                VideoOperation::StartEndToVideo => {
-                    let start_url = self.upload_image_to_cos(&reference_images[0]).await?;
-                    let end_url = if reference_images.len() > 1 {
-                        self.upload_image_to_cos(&reference_images[1]).await?
-                    } else {
-                        start_url.clone()
-                    };
-                    body[image_key] = json!(start_url);
-                    body[end_image_key] = json!(end_url);
-                }
-                VideoOperation::ReferenceToVideo => {
-                    let key = reference_key.unwrap_or("reference_images");
-                    let mut cos_urls = Vec::new();
-                    for image_path in reference_images.iter().take(9) {
-                        let cos_url = self.upload_image_to_cos(image_path).await?;
-                        cos_urls.push(cos_url);
+            if is_veo {
+                // veo3.1-fast image fields: image, last_image, reference_images
+                match operation {
+                    VideoOperation::ImageToVideo => {
+                        let cos_url = self.upload_image_to_cos(&reference_images[0]).await?;
+                        body["image"] = json!(cos_url);
                     }
-                    body[key] = json!(cos_urls);
+                    VideoOperation::StartEndToVideo => {
+                        let start_url = self.upload_image_to_cos(&reference_images[0]).await?;
+                        let end_url = if reference_images.len() > 1 {
+                            self.upload_image_to_cos(&reference_images[1]).await?
+                        } else {
+                            start_url.clone()
+                        };
+                        body["image"] = json!(start_url);
+                        body["last_image"] = json!(end_url);
+                    }
+                    VideoOperation::ReferenceToVideo => {
+                        let main_url = self.upload_image_to_cos(&reference_images[0]).await?;
+                        body["image"] = json!(main_url);
+                        if reference_images.len() > 1 {
+                            let mut ref_urls = Vec::new();
+                            for image_path in reference_images.iter().skip(1).take(8) {
+                                let cos_url = self.upload_image_to_cos(image_path).await?;
+                                ref_urls.push(cos_url);
+                            }
+                            body["reference_images"] = json!(ref_urls);
+                        }
+                    }
+                    VideoOperation::TextToVideo => {}
                 }
-                VideoOperation::TextToVideo => {}
+            } else {
+                // viduq3 uses "image"/"end_image"; seedance uses "image_url"/"end_image_url"/"image_urls"
+                let (image_key, end_image_key, reference_key) = if use_short_image_fields {
+                    ("image", "end_image", None)
+                } else {
+                    ("image_url", "end_image_url", Some("image_urls"))
+                };
+
+                match operation {
+                    VideoOperation::ImageToVideo => {
+                        let cos_url = self.upload_image_to_cos(&reference_images[0]).await?;
+                        body[image_key] = json!(cos_url);
+                    }
+                    VideoOperation::StartEndToVideo => {
+                        let start_url = self.upload_image_to_cos(&reference_images[0]).await?;
+                        let end_url = if reference_images.len() > 1 {
+                            self.upload_image_to_cos(&reference_images[1]).await?
+                        } else {
+                            start_url.clone()
+                        };
+                        body[image_key] = json!(start_url);
+                        body[end_image_key] = json!(end_url);
+                    }
+                    VideoOperation::ReferenceToVideo => {
+                        let key = reference_key.unwrap_or("reference_images");
+                        let mut cos_urls = Vec::new();
+                        for image_path in reference_images.iter().take(9) {
+                            let cos_url = self.upload_image_to_cos(image_path).await?;
+                            cos_urls.push(cos_url);
+                        }
+                        body[key] = json!(cos_urls);
+                    }
+                    VideoOperation::TextToVideo => {}
+                }
             }
         }
 

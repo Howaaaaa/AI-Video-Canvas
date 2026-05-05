@@ -590,6 +590,7 @@ pub async fn generate_video(
         .ok_or_else(|| format!("Provider not found for model: {}", request.model))?;
 
     // Build GenerateRequest for video
+    let resolution = request.resolution.clone();
     let generate_request = GenerateRequest {
         prompt: request.prompt,
         model: request.model,
@@ -599,7 +600,7 @@ pub async fn generate_video(
         extra_params: Some({
             let mut params = HashMap::new();
             params.insert("duration".to_string(), Value::Number(request.duration.into()));
-            params.insert("output_audio".to_string(), Value::Bool(request.output_audio));
+            params.insert("resolution".to_string(), Value::String(resolution));
             params.insert("userGenerationMode".to_string(), Value::String(request.user_generation_mode));
             if let Some(extra) = request.extra_params {
                 params.extend(extra);
