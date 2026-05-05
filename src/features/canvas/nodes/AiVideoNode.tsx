@@ -13,6 +13,7 @@ import { Video, SlidersHorizontal, FileText, ChevronDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import {
+  AUTO_REQUEST_ASPECT_RATIO,
   CANVAS_NODE_TYPES,
   EXPORT_RESULT_NODE_DEFAULT_WIDTH,
   EXPORT_RESULT_NODE_LAYOUT_HEIGHT,
@@ -28,6 +29,7 @@ import {
 } from '@/features/canvas/application/canvasServices';
 import { resolveErrorContent, showErrorDialog } from '@/features/canvas/application/errorDialog';
 import {
+  detectAspectRatio,
   resolveImageDisplayUrl,
 } from '@/features/canvas/application/imageData';
 import {
@@ -242,10 +244,25 @@ export const AiVideoNode = memo(({ id, data, selected, width, height }: AiVideoN
     [aspectRatioOptions, data.aspectRatio]
   );
 
-  const durationOptions = useMemo<DurationChoice[]>(
-    () => selectedModel.durations,
-    [selectedModel.durations]
-  );
+  const outputAudio = (data.extraParams as Record<string, unknown> | undefined)?.generate_audio as boolean
+    ?? (data.extraParams as Record<string, unknown> | undefined)?.output_audio as boolean
+    ?? (selectedModel.defaultExtraParams as Record<string, unknown> | undefined)?.generate_audio as boolean
+    ?? (selectedModel.defaultExtraParams as Record<string, unknown> | undefined)?.output_audio as boolean
+    ?? false;
+
+  // User-selectable generation mode
+  const userGenerationMode: UserGenerationMode =
+    !supportsReferenceMode && data.userGenerationMode === 'reference'
+      ? 'start-end'
+      : (data.userGenerationMode ?? 'start-end');
+
+  const durationOptions = useMemo<DurationChoice[]>(() => {
+    const durations = selectedModel.durations;
+    if (selectedModel.id === 'lemondata/veo3.1-fast' && userGenerationMode === 'reference') {
+      return durations.filter((d) => d.value === 8);
+    }
+    return durations;
+  }, [selectedModel.durations, selectedModel.id, userGenerationMode]);
 
   const selectedDuration = useMemo(
     () =>
@@ -253,14 +270,6 @@ export const AiVideoNode = memo(({ id, data, selected, width, height }: AiVideoN
       durationOptions[0],
     [durationOptions, data.duration]
   );
-
-  const outputAudio = data.outputAudio ?? false;
-
-  // User-selectable generation mode
-  const userGenerationMode: UserGenerationMode =
-    !supportsReferenceMode && data.userGenerationMode === 'reference'
-      ? 'start-end'
-      : (data.userGenerationMode ?? 'start-end');
 
   // Resolved API operation mode based on user selection and image count
   const apiOperationMode = useMemo(
@@ -300,9 +309,13 @@ export const AiVideoNode = memo(({ id, data, selected, width, height }: AiVideoN
 
   useEffect(() => {
     if (data.model !== selectedModel.id) {
-      updateNodeData(id, { model: selectedModel.id });
+      updateNodeData(id, {
+        model: selectedModel.id,
+        resolution: selectedModel.resolutions[0]?.value ?? '720p',
+        extraParams: selectedModel.defaultExtraParams ?? {},
+      });
     }
-  }, [data.model, id, selectedModel.id, updateNodeData]);
+  }, [data.model, id, selectedModel.id, selectedModel.resolutions, selectedModel.defaultExtraParams, updateNodeData]);
 
   const incomingImageViewerList = useMemo(
     () => incomingImageItems.map((item) => resolveImageDisplayUrl(item.imageUrl)),
@@ -418,12 +431,22 @@ export const AiVideoNode = memo(({ id, data, selected, width, height }: AiVideoN
       await canvasAiGateway.setApiKey(selectedModel.providerId, providerApiKey);
       await setCosConfig(cosConfig);
 
+      let resolvedAspectRatio = selectedAspectRatio.value;
+      if (resolvedAspectRatio === AUTO_REQUEST_ASPECT_RATIO && incomingImages.length > 0) {
+        try {
+          resolvedAspectRatio = await detectAspectRatio(incomingImages[0]);
+        } catch {
+          // fall back to default 16:9
+          resolvedAspectRatio = '16:9';
+        }
+      }
+
       const result = await generateVideo({
         prompt,
         model: selectedModel.id,
         duration: selectedDuration.value,
-        aspect_ratio: selectedAspectRatio.value,
-        resolution: data.resolution ?? '480p',
+        aspect_ratio: resolvedAspectRatio,
+        resolution: data.resolution ?? selectedModel.resolutions[0]?.value ?? '720p',
         output_audio: outputAudio,
         user_generation_mode: userGenerationMode,
         reference_images: incomingImages,
@@ -713,7 +736,7 @@ export const AiVideoNode = memo(({ id, data, selected, width, height }: AiVideoN
           >
             <SlidersHorizontal className={`${NODE_CONTROL_ICON_CLASS} shrink-0`} />
             <span className="min-w-0 truncate text-[10px] leading-none">
-              {getApiOperationLabel(apiOperationMode, t)} · {selectedAspectRatio.value} · {data.resolution ?? '480p'} · {selectedDuration.value}s · {outputAudio ? '🔊' : '🔇'}
+              {getApiOperationLabel(apiOperationMode, t)} · {selectedAspectRatio.value} · {data.resolution ?? selectedModel.resolutions[0]?.value ?? '720p'} · {selectedDuration.value}s · {outputAudio ? '🔊' : '🔇'}
             </span>
           </UiChipButton>
         </div>
@@ -1025,7 +1048,11 @@ export const AiVideoNode = memo(({ id, data, selected, width, height }: AiVideoN
                         }`}
                         onClick={(event) => {
                           event.stopPropagation();
-                          updateNodeData(id, { model: model.id });
+                          updateNodeData(id, {
+                            model: model.id,
+                            resolution: model.resolutions[0]?.value ?? '720p',
+                            extraParams: model.defaultExtraParams ?? {},
+                          });
                           setShowModelPanel(false);
                         }}
                       >

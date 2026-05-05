@@ -39,13 +39,13 @@ export const videoModel: VideoModelDefinition = {
     {
       key: 'output_audio',
       label: 'Generate Audio',
-      labelKey: 'modelParams.outputAudio',
+      labelKey: 'modelParams.generateAudio',
       type: 'boolean',
-      defaultValue: false,
+      defaultValue: true,
     },
   ],
   defaultExtraParams: {
-    output_audio: false,
+    output_audio: true,
   },
   operations: [
     { value: 'text-to-video', label: 'Text to Video' },

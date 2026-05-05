@@ -85,7 +85,8 @@
     "thinkingHigh": "高",
     "audio": "音频",
     "bgm": "背景音乐",
-    "outputAudio": "生成音频"
+    "outputAudio": "生成音频",
+    "generateAudio": "生成音频"
   },
   "node": {
     "menu": {

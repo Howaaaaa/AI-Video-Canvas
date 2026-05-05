@@ -85,7 +85,8 @@
     "thinkingHigh": "High",
     "audio": "Audio",
     "bgm": "BGM",
-    "outputAudio": "Generate Audio"
+    "outputAudio": "Generate Audio",
+    "generateAudio": "Generate Audio"
   },
   "node": {
     "menu": {
