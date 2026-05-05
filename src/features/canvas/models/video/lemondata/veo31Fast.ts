@@ -1,43 +1,32 @@
 import type { VideoModelDefinition } from '../../types';
 
-export const LEMONDATA_SEEDANCE_2_FAST_MODEL_ID = 'lemondata/seedance-2.0-fast';
+export const LEMONDATA_VEO31_FAST_MODEL_ID = 'lemondata/veo3.1-fast';
 
-const SEEDANCE_ASPECT_RATIOS = [
-  '1:1',
-  '3:4',
-  '4:3',
-  '9:16',
-  '16:9',
-  '21:9',
-] as const;
+const VEO31_ASPECT_RATIOS = ['auto', '16:9', '9:16'] as const;
 
 export const videoModel: VideoModelDefinition = {
-  id: LEMONDATA_SEEDANCE_2_FAST_MODEL_ID,
+  id: LEMONDATA_VEO31_FAST_MODEL_ID,
   mediaType: 'video',
-  displayName: 'Seedance 2.0 Fast (LemonData)',
+  displayName: 'Veo 3.1 Fast (LemonData)',
   providerId: 'lemondata',
-  description: 'LemonData · Seedance 2.0 Fast 视频生成',
-  eta: '2-3min',
-  expectedDurationMs: 180000,
-  defaultAspectRatio: '16:9',
-  defaultDuration: 5,
-  aspectRatios: SEEDANCE_ASPECT_RATIOS.map((value) => ({ value, label: value })),
+  description: 'LemonData · Google Veo 3.1 Fast 视频生成',
+  eta: '1-2min',
+  expectedDurationMs: 120000,
+  defaultAspectRatio: 'auto',
+  defaultDuration: 8,
+  aspectRatios: VEO31_ASPECT_RATIOS.map((value) => ({ value, label: value === 'auto' ? 'Auto' : value })),
   durations: [
     { value: 4, label: '4s' },
-    { value: 5, label: '5s' },
     { value: 6, label: '6s' },
     { value: 8, label: '8s' },
-    { value: 10, label: '10s' },
-    { value: 12, label: '12s' },
-    { value: 15, label: '15s' },
   ],
   resolutions: [
-    { value: '480p', label: '480p' },
     { value: '720p', label: '720p' },
+    { value: '1080p', label: '1080p' },
   ],
   extraParamsSchema: [
     {
-      key: 'output_audio',
+      key: 'generate_audio',
       label: 'Generate Audio',
       labelKey: 'modelParams.generateAudio',
       type: 'boolean',
@@ -45,7 +34,7 @@ export const videoModel: VideoModelDefinition = {
     },
   ],
   defaultExtraParams: {
-    output_audio: true,
+    generate_audio: true,
   },
   operations: [
     { value: 'text-to-video', label: 'Text to Video' },
@@ -54,7 +43,7 @@ export const videoModel: VideoModelDefinition = {
     { value: 'reference-to-video', label: 'Reference to Video' },
   ],
   resolveRequest: ({ referenceImageCount }) => ({
-    requestModel: LEMONDATA_SEEDANCE_2_FAST_MODEL_ID,
+    requestModel: LEMONDATA_VEO31_FAST_MODEL_ID,
     modeLabel: referenceImageCount > 0 ? 'Image to Video' : 'Text to Video',
   }),
 };

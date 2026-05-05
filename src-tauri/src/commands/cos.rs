@@ -1,28 +1,82 @@
+use std::sync::RwLock;
 use hmac::{Hmac, Mac};
 use sha1::{Sha1, Digest};
 use chrono::Utc;
 use hex::encode as hex_encode;
+use serde::Deserialize;
 use tracing::info;
 
 type HmacSha1 = Hmac<Sha1>;
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct CosConfig {
+    #[serde(rename = "secretId")]
+    pub secret_id: String,
+    #[serde(rename = "secretKey")]
+    pub secret_key: String,
+    pub region: String,
+    pub bucket: String,
+}
+
+impl Default for CosConfig {
+    fn default() -> Self {
+        Self {
+            secret_id: String::new(),
+            secret_key: String::new(),
+            region: "ap-nanjing".to_string(),
+            bucket: String::new(),
+        }
+    }
+}
+
+static COS_CONFIG: RwLock<CosConfig> = RwLock::new(CosConfig {
+    secret_id: String::new(),
+    secret_key: String::new(),
+    region: String::new(),
+    bucket: String::new(),
+});
+
+fn cos_host_region_bucket() -> (String, String, String) {
+    let cfg = COS_CONFIG.read().unwrap_or_else(|e| e.into_inner());
+    let region = if cfg.region.is_empty() { "ap-nanjing".to_string() } else { cfg.region.clone() };
+    let bucket = cfg.bucket.clone();
+    let host = if bucket.is_empty() {
+        String::new()
+    } else {
+        format!("{}.cos.{}.myqcloud.com", bucket, region)
+    };
+    (host, region, bucket)
+}
+
+fn cos_base_url(host: &str) -> String {
+    if host.is_empty() { String::new() } else { format!("https://{}", host) }
+}
+
+#[tauri::command]
+pub fn set_cos_config(config: CosConfig) {
+    let region = config.region.clone();
+    let bucket = config.bucket.clone();
+    let has_id = !config.secret_id.is_empty();
+    let has_key = !config.secret_key.is_empty();
+    match COS_CONFIG.write() {
+        Ok(mut cfg) => *cfg = config,
+        Err(e) => {
+            tracing::error!("Failed to acquire COS_CONFIG write lock: {}", e);
+            return;
+        }
+    }
+    info!(
+        "[COS] Config updated: region={}, bucket={}, hasSecretId={}, hasSecretKey={}",
+        region, bucket, has_id, has_key
+    );
+}
+
 fn cos_secret_id() -> String {
-    std::env::var("LEMONDATA_COS_SECRET_ID").unwrap_or_default()
+    COS_CONFIG.read().map(|c| c.secret_id.clone()).unwrap_or_default()
 }
+
 fn cos_secret_key() -> String {
-    std::env::var("LEMONDATA_COS_SECRET_KEY").unwrap_or_default()
-}
-fn cos_region() -> String {
-    std::env::var("LEMONDATA_COS_REGION").unwrap_or_else(|_| "ap-nanjing".to_string())
-}
-fn cos_bucket() -> String {
-    std::env::var("LEMONDATA_COS_BUCKET").unwrap_or_else(|_| "lemondata-1328693774".to_string())
-}
-fn cos_host() -> String {
-    format!("{}.cos.{}.myqcloud.com", cos_bucket(), cos_region())
-}
-fn cos_base_url() -> String {
-    format!("https://{}", cos_host())
+    COS_CONFIG.read().map(|c| c.secret_key.clone()).unwrap_or_default()
 }
 
 pub struct CosUploader {
@@ -45,7 +99,12 @@ impl Default for CosUploader {
 
 impl CosUploader {
     pub fn generate_public_url(filename: &str) -> String {
-        format!("{}/{}", &cos_base_url(), filename)
+        let (host, _region, _bucket) = cos_host_region_bucket();
+        let base_url = cos_base_url(&host);
+        if base_url.is_empty() {
+            return String::new();
+        }
+        format!("{}/{}", base_url, filename)
     }
 
     fn generate_signature(
@@ -87,6 +146,18 @@ impl CosUploader {
         data: &[u8],
         content_type: &str,
     ) -> Result<String, String> {
+        let (host, _region, _bucket) = cos_host_region_bucket();
+        let base_url = cos_base_url(&host);
+        if host.is_empty() || base_url.is_empty() {
+            return Err("COS 未配置，请在设置中填写存储密钥（图床密钥）".to_string());
+        }
+
+        let secret_id = cos_secret_id();
+        let secret_key = cos_secret_key();
+        if secret_id.is_empty() || secret_key.is_empty() {
+            return Err("COS 密钥未配置，请在设置中填写存储密钥".to_string());
+        }
+
         let now = Utc::now().timestamp();
         let expiration = now + 3600; // 1 hour expiration
 
@@ -96,11 +167,11 @@ impl CosUploader {
         let headers = format!(
             "content-type={}&host={}",
             urlencoding::encode(content_type),
-            &cos_host()
+            host
         );
 
         let signature = Self::generate_signature(
-            &cos_secret_key(),
+            &secret_key,
             "put",
             &path,
             &headers,
@@ -114,20 +185,20 @@ impl CosUploader {
         // Build authorization header
         let authorization = format!(
             "q-sign-algorithm=sha1&q-ak={}&q-sign-time={}&q-key-time={}&q-header-list=content-type;host&q-url-param-list=&q-signature={}",
-            &cos_secret_id(),
+            secret_id,
             key_time,
             key_time,
             signature
         );
 
-        let url = format!("{}/{}", &cos_base_url(), filename);
+        let url = format!("{}/{}", base_url, filename);
 
         info!("[COS Upload] Uploading to: {}, size: {} bytes", url, data.len());
 
         let response = self
             .client
             .put(&url)
-            .header("Host", &cos_host())
+            .header("Host", &host)
             .header("Content-Type", content_type)
             .header("Authorization", authorization)
             .body(data.to_vec())

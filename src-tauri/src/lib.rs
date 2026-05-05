@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use commands::ai as ai_commands;
+use commands::cos;
 use commands::image;
 use commands::project_state;
 use commands::system;
@@ -181,6 +182,7 @@ pub fn run() {
             image::save_image_source_to_app_debug_dir,
             image::copy_image_source_to_clipboard,
             ai_commands::set_api_key,
+            cos::set_cos_config,
             ai_commands::submit_generate_image_job,
             ai_commands::get_generate_image_job,
             ai_commands::generate_image,
