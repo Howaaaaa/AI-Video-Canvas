@@ -150,7 +150,16 @@
     },
     "textAnnotation": {
       "placeholder": "输入 Markdown 文本，取消选中后会渲染预览",
-      "empty": "空注释"
+      "empty": "空注释",
+      "copy": "复制",
+      "bgColor": {
+        "default": "默认",
+        "red": "红色",
+        "yellow": "黄色",
+        "blue": "蓝色",
+        "green": "绿色",
+        "purple": "紫色"
+      }
     },
     "aiChat": {
       "prompt": "对话内容",
