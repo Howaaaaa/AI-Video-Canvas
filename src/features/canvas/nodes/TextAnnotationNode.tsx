@@ -1,6 +1,6 @@
 import { memo, useCallback } from 'react';
 import { type NodeProps } from '@xyflow/react';
-import { FileText } from 'lucide-react';
+import { Copy, FileText } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
@@ -26,6 +26,15 @@ const MIN_HEIGHT = 100;
 const MAX_WIDTH = 900;
 const MAX_HEIGHT = 900;
 
+const BG_COLORS: { key: string; className: string; label: string }[] = [
+  { key: '', className: 'bg-surface-dark/85', label: 'Deep' },
+  { key: 'red', className: 'bg-rose-200/70 dark:bg-rose-950/70', label: 'Red' },
+  { key: 'yellow', className: 'bg-amber-200/70 dark:bg-amber-950/70', label: 'Yellow' },
+  { key: 'blue', className: 'bg-sky-200/70 dark:bg-sky-950/70', label: 'Blue' },
+  { key: 'green', className: 'bg-emerald-200/70 dark:bg-emerald-950/70', label: 'Green' },
+  { key: 'purple', className: 'bg-violet-200/70 dark:bg-violet-950/70', label: 'Purple' },
+];
+
 export const TextAnnotationNode = memo(({
   id,
   data,
@@ -40,6 +49,8 @@ export const TextAnnotationNode = memo(({
   const resolvedTitle = resolveNodeDisplayName(CANVAS_NODE_TYPES.textAnnotation, data);
   const resolvedWidth = Math.max(MIN_WIDTH, Math.round(width ?? DEFAULT_WIDTH));
   const resolvedHeight = Math.max(MIN_HEIGHT, Math.round(height ?? DEFAULT_HEIGHT));
+  const currentBg = BG_COLORS.find((c) => c.key === (data.bgColor ?? '')) ?? BG_COLORS[0];
+
   const handleMarkdownLinkClick = useCallback((href?: string) => {
     if (!href) {
       return;
@@ -47,10 +58,20 @@ export const TextAnnotationNode = memo(({
     void openUrl(href);
   }, []);
 
+  const handleCopy = useCallback(() => {
+    if (!content) {
+      return;
+    }
+    navigator.clipboard.writeText(content).catch(() => {
+      // Silently fail — clipboard access may not be available
+    });
+  }, [content]);
+
   return (
     <div
       className={`
-        group relative h-full w-full overflow-visible rounded-[var(--node-radius)] border bg-surface-dark/85 p-1.5 transition-colors duration-150
+        group relative h-full w-full overflow-visible rounded-[var(--node-radius)] border p-1.5 transition-colors duration-150
+        ${currentBg.className}
         ${selected
           ? 'border-accent shadow-[0_0_0_1px_rgba(59,130,246,0.32)]'
           : 'border-[rgba(15,23,42,0.22)] hover:border-[rgba(15,23,42,0.34)] dark:border-[rgba(255,255,255,0.22)] dark:hover:border-[rgba(255,255,255,0.34)]'}
@@ -74,46 +95,63 @@ export const TextAnnotationNode = memo(({
       />
 
       {selected ? (
-        <textarea
-          autoFocus
-          value={content}
-          onChange={(event) => {
-            const nextValue = event.target.value;
-            updateNodeData(id, { content: nextValue });
-          }}
-          placeholder={t('node.textAnnotation.placeholder')}
-          className="nodrag nowheel h-full w-full resize-none border-none bg-transparent px-1 py-0.5 text-sm leading-6 text-text-dark outline-none placeholder:text-text-muted/70"
-        />
+        <>
+          <textarea
+            autoFocus
+            value={content}
+            onChange={(event) => {
+              const nextValue = event.target.value;
+              updateNodeData(id, { content: nextValue });
+            }}
+            placeholder={t('node.textAnnotation.placeholder')}
+            className="nodrag nowheel h-full w-full resize-none border-none bg-transparent px-1 py-0.5 text-sm leading-6 text-text-dark outline-none placeholder:text-text-muted/70"
+          />
+
+        </>
       ) : (
-        <div className="nodrag nowheel h-full w-full overflow-auto px-1 py-0.5 text-sm leading-6 text-text-dark">
-          {content.trim().length > 0 ? (
-            <div className="markdown-body break-words [&_a]:text-accent [&_blockquote]:border-l-2 [&_blockquote]:border-white/20 [&_blockquote]:pl-3 [&_code]:rounded [&_code]:bg-white/10 [&_code]:px-1 [&_code]:py-0.5 [&_h1]:text-base [&_h1]:font-semibold [&_h2]:text-[15px] [&_h2]:font-semibold [&_h3]:text-sm [&_h3]:font-semibold [&_hr]:border-white/10 [&_li]:my-0.5 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-0 [&_p+_p]:mt-4 [&_pre]:overflow-auto [&_pre]:rounded-md [&_pre]:bg-black/30 [&_pre]:p-2 [&_table]:w-full [&_table]:border-collapse [&_table]:text-xs [&_td]:border [&_td]:border-white/10 [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-white/10 [&_th]:px-2 [&_th]:py-1 [&_ul]:list-disc [&_ul]:pl-5">
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm, remarkBreaks]}
-                components={{
-                  a: ({ href, children, ...props }) => (
-                    <a
-                      {...props}
-                      href={href}
-                      target="_blank"
-                      rel="noreferrer"
-                      onClick={(event) => {
-                        event.preventDefault();
-                        handleMarkdownLinkClick(href);
-                      }}
-                    >
-                      {children}
-                    </a>
-                  ),
-                }}
-              >
-                {content}
-              </ReactMarkdown>
-            </div>
-          ) : (
-            <div className="pt-1 text-text-muted">{t('node.textAnnotation.empty')}</div>
+        <>
+          {/* Hover copy button */}
+          {content.trim().length > 0 && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); handleCopy(); }}
+              className="absolute right-1 top-8 z-10 flex h-6 w-6 items-center justify-center rounded-md bg-black/40 opacity-0 transition-opacity hover:bg-white/10 group-hover:opacity-100"
+              title={t('node.textAnnotation.copy')}
+            >
+              <Copy className="h-3 w-3 text-text-muted" />
+            </button>
           )}
-        </div>
+
+          <div className="nodrag nowheel h-full w-full overflow-auto px-1 py-0.5 text-sm leading-6 text-text-dark">
+            {content.trim().length > 0 ? (
+              <div className="markdown-body break-words [&_a]:text-accent [&_blockquote]:border-l-2 [&_blockquote]:border-white/20 [&_blockquote]:pl-3 [&_code]:rounded [&_code]:bg-white/10 [&_code]:px-1 [&_code]:py-0.5 [&_h1]:text-base [&_h1]:font-semibold [&_h2]:text-[15px] [&_h2]:font-semibold [&_h3]:text-sm [&_h3]:font-semibold [&_hr]:border-white/10 [&_li]:my-0.5 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-0 [&_p+_p]:mt-4 [&_pre]:overflow-auto [&_pre]:rounded-md [&_pre]:bg-black/30 [&_pre]:p-2 [&_table]:w-full [&_table]:border-collapse [&_table]:text-xs [&_td]:border [&_td]:border-white/10 [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-white/10 [&_th]:px-2 [&_th]:py-1 [&_ul]:list-disc [&_ul]:pl-5">
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm, remarkBreaks]}
+                  components={{
+                    a: ({ href, children, ...props }) => (
+                      <a
+                        {...props}
+                        href={href}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          handleMarkdownLinkClick(href);
+                        }}
+                      >
+                        {children}
+                      </a>
+                    ),
+                  }}
+                >
+                  {content}
+                </ReactMarkdown>
+              </div>
+            ) : (
+              <div className="pt-1 text-text-muted">{t('node.textAnnotation.empty')}</div>
+            )}
+          </div>
+        </>
       )}
     </div>
   );

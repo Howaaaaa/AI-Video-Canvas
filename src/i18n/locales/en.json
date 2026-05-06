@@ -150,7 +150,16 @@
     },
     "textAnnotation": {
       "placeholder": "Write Markdown text. It will render when unselected.",
-      "empty": "Empty note"
+      "empty": "Empty note",
+      "copy": "Copy",
+      "bgColor": {
+        "default": "Default",
+        "red": "Red",
+        "yellow": "Yellow",
+        "blue": "Blue",
+        "green": "Green",
+        "purple": "Purple"
+      }
     },
     "aiChat": {
       "prompt": "Chat Content",

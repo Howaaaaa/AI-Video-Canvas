@@ -12,9 +12,11 @@ import {
   isImageEditNode,
   isStoryboardGenNode,
   isStoryboardSplitNode,
+  isTextAnnotationNode,
   isUploadNode,
   type CanvasNode,
   type NodeToolType,
+  type TextAnnotationNodeData,
 } from '@/features/canvas/domain/canvasNodes';
 import { canvasEventBus } from '@/features/canvas/application/canvasServices';
 import { getNodeToolPlugins } from '@/features/canvas/tools';
@@ -56,15 +58,27 @@ const TOOLBAR_BUTTON_RADIUS_CLASS = 'rounded-full';
 const TOOLBAR_NEUTRAL_BUTTON_CLASS =
   'border-[rgba(255,255,255,0.18)] bg-bg-dark/70 text-text-dark hover:border-[rgba(255,255,255,0.32)] hover:bg-bg-dark';
 
+const TEXT_COLOR_SWATCHES: { key: string; colorClass: string }[] = [
+  { key: '', colorClass: 'bg-surface-dark' },
+  { key: 'red', colorClass: 'bg-rose-200 dark:bg-rose-950' },
+  { key: 'yellow', colorClass: 'bg-amber-200 dark:bg-amber-950' },
+  { key: 'blue', colorClass: 'bg-sky-200 dark:bg-sky-950' },
+  { key: 'green', colorClass: 'bg-emerald-200 dark:bg-emerald-950' },
+  { key: 'purple', colorClass: 'bg-violet-200 dark:bg-violet-950' },
+];
+
 export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
   const { t, i18n } = useTranslation();
   const isImageEdit = isImageEditNode(node);
   const isStoryboardGen = isStoryboardGenNode(node);
   const isStoryboardSplit = isStoryboardSplitNode(node);
+  const isTextAnnotation = isTextAnnotationNode(node);
+  const textAnnotationData = isTextAnnotation ? (node.data as TextAnnotationNodeData) : null;
   const canCopyStoryboardText = isStoryboardGen || isStoryboardSplit;
   const tools = useMemo(() => getNodeToolPlugins(node), [node]);
   const deleteNode = useCanvasStore((state) => state.deleteNode);
   const ungroupNode = useCanvasStore((state) => state.ungroupNode);
+  const updateNodeData = useCanvasStore((state) => state.updateNodeData);
   const canReupload = isUploadNode(node) && (Boolean(node.data.imageUrl) || Boolean((node.data as { videoUrl?: string | null }).videoUrl));
   const downloadPresetPaths = useSettingsStore((state) => state.downloadPresetPaths);
   const ignoreAtTagWhenCopyingAndGenerating = useSettingsStore(
@@ -75,10 +89,12 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
   const [isCopySuccess, setIsCopySuccess] = useState(false);
   const [isCopyTextSuccess, setIsCopyTextSuccess] = useState(false);
   const [isCopyErrorSuccess, setIsCopyErrorSuccess] = useState(false);
+  const [isCopyAnnotationSuccess, setIsCopyAnnotationSuccess] = useState(false);
   const downloadMenuRef = useRef<HTMLDivElement | null>(null);
   const copyFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const copyTextFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const copyErrorFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const copyAnnotationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const downloadMenuCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const imageSource = useMemo(() => {
     if (isUploadNode(node) || isImageEditNode(node) || isExportImageNode(node) || isExportVideoNode(node)) {
@@ -184,6 +200,9 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
       }
       if (copyErrorFeedbackTimerRef.current) {
         clearTimeout(copyErrorFeedbackTimerRef.current);
+      }
+      if (copyAnnotationTimerRef.current) {
+        clearTimeout(copyAnnotationTimerRef.current);
       }
       if (downloadMenuCloseTimerRef.current) {
         clearTimeout(downloadMenuCloseTimerRef.current);
@@ -471,6 +490,52 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
             <Unlink2 className="h-3.5 w-3.5" />
             {t('nodeToolbar.ungroup')}
           </UiChipButton>
+        )}
+        {isTextAnnotation && textAnnotationData && (
+          <>
+            <UiChipButton
+              key="text-annotation-copy"
+              className={`h-8 ${TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs ${TOOLBAR_NEUTRAL_BUTTON_CLASS} ${
+                isCopyAnnotationSuccess
+                  ? '!border-emerald-400/70 !bg-emerald-500/20 !text-emerald-200 hover:!bg-emerald-500/30'
+                  : ''
+              }`}
+              onClick={() => {
+                const content = textAnnotationData.content || '';
+                if (!content) return;
+                navigator.clipboard.writeText(content).catch(() => {});
+                setIsCopyAnnotationSuccess(true);
+                if (copyAnnotationTimerRef.current) {
+                  clearTimeout(copyAnnotationTimerRef.current);
+                }
+                copyAnnotationTimerRef.current = setTimeout(() => {
+                  setIsCopyAnnotationSuccess(false);
+                }, 1100);
+              }}
+            >
+              <Copy className="h-3.5 w-3.5" />
+              {isCopyAnnotationSuccess ? t('nodeToolbar.copied') : t('node.textAnnotation.copy')}
+            </UiChipButton>
+
+            <div className="mx-1 flex items-center gap-1">
+              {TEXT_COLOR_SWATCHES.map(({ key, colorClass }) => {
+                const isActive = (textAnnotationData.bgColor ?? '') === key;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => updateNodeData(node.id, { bgColor: key || '' })}
+                    className={`h-4 w-4 rounded-full border transition-transform ${colorClass} ${
+                      isActive
+                        ? 'scale-125 border-white shadow-[0_0_6px_rgba(255,255,255,0.5)]'
+                        : 'border-white/40 hover:scale-110'
+                    }`}
+                    title={t(`node.textAnnotation.bgColor.${key || 'default'}`)}
+                  />
+                );
+              })}
+            </div>
+          </>
         )}
         <UiChipButton
           key="node-delete"
