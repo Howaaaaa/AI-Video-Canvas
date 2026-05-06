@@ -326,6 +326,9 @@ export function NodeToolDialog() {
   }, [activePlugin, options, sourceImageUrl]);
 
   const isOpen = Boolean(activeToolDialog && isSplitImageReady);
+  const cropTitleClass = activePlugin?.type === NODE_TOOL_TYPES.crop
+    ? 'text-base font-semibold'
+    : '';
 
   return (
     <UiModal
@@ -333,6 +336,7 @@ export function NodeToolDialog() {
       title={`${resolveToolLabel(activePlugin?.type)}${t('toolDialog.suffix')}`}
       onClose={closeDialog}
       widthClassName={widthClassName}
+      titleClassName={cropTitleClass}
       footer={
         <>
           <UiButton variant="ghost" size="sm" onClick={closeDialog}>

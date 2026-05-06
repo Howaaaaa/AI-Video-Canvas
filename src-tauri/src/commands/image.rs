@@ -253,6 +253,8 @@ pub struct CropImageSourcePayload {
     pub crop_y: Option<f64>,
     pub crop_width: Option<f64>,
     pub crop_height: Option<f64>,
+    pub flip_h: Option<bool>,
+    pub flip_v: Option<bool>,
 }
 
 fn split_sizes(total: u32, segments: u32) -> Vec<u32> {
@@ -817,7 +819,15 @@ pub async fn crop_image_source(
     let final_width = (crop_width.floor().max(1.0) as u32).min(max_crop_width);
     let final_height = (crop_height.floor().max(1.0) as u32).min(max_crop_height);
 
-    let cropped = source_image.crop_imm(final_x, final_y, final_width, final_height);
+    let mut cropped = source_image.crop_imm(final_x, final_y, final_width, final_height);
+
+    if payload.flip_h.unwrap_or(false) {
+        cropped = cropped.fliph();
+    }
+    if payload.flip_v.unwrap_or(false) {
+        cropped = cropped.flipv();
+    }
+
     let mut buffer = Cursor::new(Vec::new());
     cropped
         .write_to(&mut buffer, image::ImageFormat::Png)

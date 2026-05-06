@@ -62,6 +62,7 @@ interface UiModalProps {
   footer?: ReactNode;
   widthClassName?: string;
   containerClassName?: string;
+  titleClassName?: string;
 }
 
 function resolveButtonVariant(variant: ButtonVariant): string {
@@ -466,12 +467,15 @@ export function UiModal({
   footer,
   widthClassName = 'w-[460px]',
   containerClassName = '',
+  titleClassName = '',
 }: UiModalProps) {
   const { shouldRender, isVisible } = useDialogTransition(isOpen, UI_DIALOG_TRANSITION_MS);
 
   if (!shouldRender) {
     return null;
   }
+
+  const isTitleRight = titleClassName.includes('text-right');
 
   return (
     <div className={`fixed ${UI_CONTENT_OVERLAY_INSET_CLASS} z-50 flex items-center justify-center ${containerClassName}`}>
@@ -483,10 +487,13 @@ export function UiModal({
         className={`relative transition-opacity duration-200 ${isVisible ? 'opacity-100' : 'opacity-0'} ${widthClassName}`}
       >
         <div className="flex items-center justify-between border-b border-[rgba(255,255,255,0.1)] px-4 py-3">
-          <h2 className="text-sm font-medium text-text-dark">{title}</h2>
-          <UiIconButton className="h-8 w-8" onClick={onClose}>
+          {isTitleRight && <UiIconButton className="h-8 w-8" onClick={onClose}>
             <X className="h-4 w-4" />
-          </UiIconButton>
+          </UiIconButton>}
+          <h2 className={`text-sm font-medium text-text-dark ${titleClassName}`}>{title}</h2>
+          {!isTitleRight && <UiIconButton className="h-8 w-8" onClick={onClose}>
+            <X className="h-4 w-4" />
+          </UiIconButton>}
         </div>
 
         <div className="px-4 py-4">{children}</div>

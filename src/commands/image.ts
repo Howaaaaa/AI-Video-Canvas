@@ -67,6 +67,8 @@ export interface CropImageSourcePayload {
   cropY?: number;
   cropWidth?: number;
   cropHeight?: number;
+  flipH?: boolean;
+  flipV?: boolean;
 }
 
 export interface MergeStoryboardImagesResult {

@@ -21,6 +21,8 @@ export const cropToolPlugin: CanvasToolPlugin = {
   createInitialOptions: () => ({
     aspectRatio: 'free',
     customAspectRatio: '',
+    flipH: false,
+    flipV: false,
   }),
   fields: [
     {

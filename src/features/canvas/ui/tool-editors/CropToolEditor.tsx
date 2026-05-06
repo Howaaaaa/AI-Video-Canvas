@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import ReactCrop, {
-  centerCrop,
-  makeAspectCrop,
   type Crop,
   type PixelCrop,
 } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
+import { FlipHorizontal, FlipVertical } from 'lucide-react';
 
 import { resolveImageDisplayUrl } from '@/features/canvas/application/imageData';
 import type { ToolSelectField } from '@/features/canvas/tools';
@@ -95,22 +95,31 @@ function buildDefaultCrop(width: number, height: number, aspect: number | undefi
     return { unit: 'px', x: 0, y: 0, width, height };
   }
 
-  return centerCrop(
-    makeAspectCrop(
-      {
-        unit: '%',
-        width: 88,
-      },
-      aspect,
-      width,
-      height
-    ),
-    width,
-    height
-  );
+  // Calculate the largest possible crop that fits at the given aspect ratio
+  let cropWidth: number;
+  let cropHeight: number;
+
+  if (width / height >= aspect) {
+    // Image is wider than or equal to the target ratio → constrain by height
+    cropHeight = height;
+    cropWidth = height * aspect;
+  } else {
+    // Image is taller than the target ratio → constrain by width
+    cropWidth = width;
+    cropHeight = width / aspect;
+  }
+
+  return {
+    unit: 'px',
+    x: (width - cropWidth) / 2,
+    y: (height - cropHeight) / 2,
+    width: cropWidth,
+    height: cropHeight,
+  };
 }
 
 export function CropToolEditor({ plugin, sourceImageUrl, options, onOptionsChange }: VisualToolEditorProps) {
+  const { t } = useTranslation();
   const imageRef = useRef<HTMLImageElement | null>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const previousAspectKeyRef = useRef<string | null>(null);
@@ -159,7 +168,7 @@ export function CropToolEditor({ plugin, sourceImageUrl, options, onOptionsChang
       VIEWPORT_MIN_HEIGHT_PX,
       viewportSize.height - VIEWPORT_PADDING_PX * 2
     );
-    const ratio = Math.min(maxWidth / naturalSize.width, maxHeight / naturalSize.height, 1);
+    const ratio = Math.min(maxWidth / naturalSize.width, maxHeight / naturalSize.height);
 
     return {
       width: Math.max(1, Math.round(naturalSize.width * ratio)),
@@ -341,15 +350,15 @@ export function CropToolEditor({ plugin, sourceImageUrl, options, onOptionsChang
   }, []);
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2 rounded-lg bg-surface-dark px-2 py-1">
         {ratioOptions.map((item) => {
           const active = item.value === aspectMode;
           return (
             <button
               key={item.value}
               type="button"
-              className={`rounded-lg border px-3 py-1.5 text-xs transition-colors ${
+              className={`rounded-lg border px-3 py-1.5 text-sm transition-colors ${
                 active
                   ? 'border-accent/45 bg-accent/15 text-text-dark'
                   : 'border-[rgba(255,255,255,0.15)] text-text-muted hover:bg-bg-dark'
@@ -368,7 +377,7 @@ export function CropToolEditor({ plugin, sourceImageUrl, options, onOptionsChang
 
         <button
           type="button"
-          className={`rounded-lg border px-3 py-1.5 text-xs transition-colors ${
+          className={`rounded-lg border px-3 py-1.5 text-sm transition-colors ${
             aspectMode === 'custom'
               ? 'border-accent/45 bg-accent/15 text-text-dark'
               : 'border-[rgba(255,255,255,0.15)] text-text-muted hover:bg-bg-dark'
@@ -381,6 +390,42 @@ export function CropToolEditor({ plugin, sourceImageUrl, options, onOptionsChang
           }
         >
           自定义
+        </button>
+
+        <div className="h-6 w-px bg-border-dark" />
+        <button
+          type="button"
+          className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm transition-colors ${
+            options.flipH
+              ? 'border-accent/45 bg-accent/15 text-text-dark'
+              : 'border-[rgba(255,255,255,0.15)] text-text-muted hover:bg-bg-dark'
+          }`}
+          onClick={() =>
+            onOptionsChange({
+              ...options,
+              flipH: !options.flipH,
+            })
+          }
+        >
+          <FlipHorizontal className="w-4 h-4" />
+          {t('tool.flipH')}
+        </button>
+        <button
+          type="button"
+          className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm transition-colors ${
+            options.flipV
+              ? 'border-accent/45 bg-accent/15 text-text-dark'
+              : 'border-[rgba(255,255,255,0.15)] text-text-muted hover:bg-bg-dark'
+          }`}
+          onClick={() =>
+            onOptionsChange({
+              ...options,
+              flipV: !options.flipV,
+            })
+          }
+        >
+          <FlipVertical className="w-4 h-4" />
+          {t('tool.flipV')}
         </button>
       </div>
 
@@ -399,7 +444,7 @@ export function CropToolEditor({ plugin, sourceImageUrl, options, onOptionsChang
               });
             }}
             placeholder="输入比例，如 3:2 或 1.5"
-            className="h-9 w-[220px] rounded-lg border border-[rgba(255,255,255,0.15)] bg-bg-dark/80 px-3 text-sm text-text-dark outline-none"
+            className="h-8 w-[200px] rounded-lg border border-[rgba(255,255,255,0.15)] bg-bg-dark/80 px-2.5 text-xs text-text-dark outline-none"
           />
           {customRatioError && <span className="text-xs text-red-400">{customRatioError}</span>}
         </div>
@@ -407,7 +452,7 @@ export function CropToolEditor({ plugin, sourceImageUrl, options, onOptionsChang
 
       <div
         ref={viewportRef}
-        className="relative h-[min(62vh,640px)] rounded-xl border border-[rgba(255,255,255,0.12)] bg-bg-dark/85"
+        className="relative h-[min(55vh,560px)] rounded-xl border border-[rgba(255,255,255,0.12)] bg-bg-dark/85"
       >
         <div className="flex h-full w-full items-center justify-center p-3">
           {renderedImageSize && (
@@ -425,12 +470,13 @@ export function CropToolEditor({ plugin, sourceImageUrl, options, onOptionsChang
                 ref={imageRef}
                 src={displaySourceImageUrl}
                 alt="Crop Source"
-                className="block select-none object-contain"
+                className="block select-none"
                 style={{
                   width: `${renderedImageSize.width}px`,
                   height: `${renderedImageSize.height}px`,
                   maxWidth: 'none',
                   maxHeight: 'none',
+                  transform: `${options.flipV ? 'scaleY(-1)' : ''} ${options.flipH ? 'scaleX(-1)' : ''}`.trim(),
                 }}
                 onLoad={handleImageLoad}
               />

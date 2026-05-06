@@ -43,7 +43,9 @@
   "tool": {
     "crop": "裁剪",
     "annotate": "标注",
-    "split": "切割"
+    "split": "切割",
+    "flipH": "水平翻转",
+    "flipV": "垂直翻转"
   },
   "toolDialog": {
     "suffix": "工具",

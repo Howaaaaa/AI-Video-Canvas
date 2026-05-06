@@ -43,7 +43,9 @@
   "tool": {
     "crop": "Crop",
     "annotate": "Annotate",
-    "split": "Split"
+    "split": "Split",
+    "flipH": "Flip H",
+    "flipV": "Flip V"
   },
   "toolDialog": {
     "suffix": " Tool",

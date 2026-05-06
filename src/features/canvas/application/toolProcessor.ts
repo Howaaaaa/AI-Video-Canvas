@@ -70,6 +70,8 @@ export class CanvasToolProcessor implements ToolProcessor {
         cropY: Number(options.cropY),
         cropWidth: Number(options.cropWidth),
         cropHeight: Number(options.cropHeight),
+        flipH: options.flipH === true,
+        flipV: options.flipV === true,
       });
     } catch {
       // Fallback to local canvas implementation when backend command is unavailable.
@@ -128,6 +130,21 @@ export class CanvasToolProcessor implements ToolProcessor {
       throw new Error('无法初始化画布');
     }
 
+    const flipH = options.flipH === true;
+    const flipV = options.flipV === true;
+
+    if (flipH || flipV) {
+      context.save();
+      if (flipH) {
+        context.translate(canvas.width, 0);
+        context.scale(-1, 1);
+      }
+      if (flipV) {
+        context.translate(0, canvas.height);
+        context.scale(1, -1);
+      }
+    }
+
     context.drawImage(
       image,
       offsetX,
@@ -139,6 +156,10 @@ export class CanvasToolProcessor implements ToolProcessor {
       canvas.width,
       canvas.height
     );
+
+    if (flipH || flipV) {
+      context.restore();
+    }
 
     return canvasToDataUrl(canvas);
   }
