@@ -183,7 +183,7 @@
       "imageToVideo": "图生视频",
       "startEndToVideo": "首尾帧",
       "referenceToVideo": "参考生图",
-      "generating": "生成中..."
+      "generating": "准备中..."
     }
   },
   "viewer": {
@@ -203,7 +203,7 @@
     "provider": "AI 提供商",
     "model": "模型",
     "prompt": "提示词",
-    "generating": "生成中...",
+    "generating": "准备中...",
     "success": "生成成功",
     "error": "生成失败"
   },

@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use tracing::info;
 
-const PIP_REQUIREMENTS: &str = "onnxruntime\nPillow\nnumpy\n";
+const PIP_REQUIREMENTS: &str = "onnxruntime==1.20.1\nPillow\nnumpy\n";
 const PIP_INDEX: &str = "https://pypi.tuna.tsinghua.edu.cn/simple";
 
 fn resolve_resource(file_name: &str) -> PathBuf {
@@ -104,19 +104,38 @@ fn ensure_venv() -> Result<PathBuf, String> {
         ));
     }
 
-    // Verify by importing
-    let verify = Command::new(&python)
+    // Verify by importing (capture stderr for debugging)
+    let verify_output = Command::new(&python)
         .arg("-c")
         .arg("import onnxruntime, PIL, numpy")
-        .status()
+        .output()
         .map_err(|e| format!("Failed to verify venv: {}", e))?;
 
-    if !verify.success() {
-        return Err("Packages installed but import check failed".to_string());
+    if !verify_output.status.success() {
+        let stderr = String::from_utf8_lossy(&verify_output.stderr);
+        return Err(format!(
+            "Import check failed: {}",
+            stderr.trim()
+        ));
     }
 
     info!("[anime_stylize] venv ready at {:?}", python);
     Ok(python)
+}
+
+fn debug_output_dir() -> Option<PathBuf> {
+    // During development: save to <project_root>/anime_stylize_outputs/
+    if let Ok(dir) = std::env::var("CARGO_MANIFEST_DIR") {
+        let project_root = PathBuf::from(&dir).parent()?.to_path_buf();
+        return Some(project_root.join("anime_stylize_outputs"));
+    }
+    // Production fallback: next to the executable
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            return Some(parent.join("anime_stylize_outputs"));
+        }
+    }
+    None
 }
 
 fn find_system_python() -> Option<String> {
@@ -169,8 +188,8 @@ pub fn stylize_image(image_bytes: &[u8], target_width: u32) -> Result<Vec<u8>, S
     std::fs::write(&input_path, image_bytes)
         .map_err(|e| format!("Failed to write temp input: {}", e))?;
 
-    let result = Command::new(&python)
-        .arg(&script)
+    let mut cmd = Command::new(&python);
+    cmd.arg(&script)
         .arg("--input")
         .arg(&input_path)
         .arg("--output")
@@ -178,8 +197,11 @@ pub fn stylize_image(image_bytes: &[u8], target_width: u32) -> Result<Vec<u8>, S
         .arg("--width")
         .arg(target_width.to_string())
         .arg("--model")
-        .arg(&model)
-        .output();
+        .arg(&model);
+    if let Some(debug_dir) = debug_output_dir() {
+        cmd.arg("--debug-dir").arg(&debug_dir);
+    }
+    let result = cmd.output();
 
     let _ = std::fs::remove_file(&input_path);
 

@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# AnimeGAN debug output
+anime_stylize_outputs/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

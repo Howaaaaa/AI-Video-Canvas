@@ -30,6 +30,7 @@ def main():
     parser.add_argument("--output", required=True)
     parser.add_argument("--width", type=int, required=True)
     parser.add_argument("--model", required=True)
+    parser.add_argument("--debug-dir")
     args = parser.parse_args()
 
     # Load image
@@ -70,14 +71,14 @@ def main():
     final.save(args.output, "JPEG", quality=95)
 
     # Debug: save copies for visual inspection (not cleaned up by Rust)
-    debug_dir = "/tmp/anime_stylize_outputs"
-    os.makedirs(debug_dir, exist_ok=True)
-    ts = int(time.time() * 1000)
-    debug_path = os.path.join(debug_dir, f"stylized_{ts}_{orig_w}x{orig_h}.jpg")
-    final.save(debug_path, "JPEG", quality=95)
-    # Also copy the input image for before/after comparison
-    import shutil
-    shutil.copy2(args.input, os.path.join(debug_dir, f"input_{ts}.jpg"))
+    debug_dir = args.debug_dir
+    if debug_dir:
+        os.makedirs(debug_dir, exist_ok=True)
+        ts = int(time.time() * 1000)
+        debug_path = os.path.join(debug_dir, f"stylized_{ts}_{orig_w}x{orig_h}.jpg")
+        final.save(debug_path, "JPEG", quality=95)
+        import shutil
+        shutil.copy2(args.input, os.path.join(debug_dir, f"input_{ts}.jpg"))
 
     print(f"OK {final.size[0]}x{final.size[1]}", file=sys.stderr)
 

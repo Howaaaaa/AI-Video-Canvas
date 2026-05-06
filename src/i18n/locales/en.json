@@ -183,7 +183,7 @@
       "imageToVideo": "Image to Video",
       "startEndToVideo": "Start-End Frames",
       "referenceToVideo": "Reference Images",
-      "generating": "Generating..."
+      "generating": "Preparing..."
     }
   },
   "viewer": {
@@ -203,7 +203,7 @@
     "provider": "AI Provider",
     "model": "Model",
     "prompt": "Prompt",
-    "generating": "Generating...",
+    "generating": "Preparing...",
     "success": "Generated successfully",
     "error": "Generation failed"
   },
