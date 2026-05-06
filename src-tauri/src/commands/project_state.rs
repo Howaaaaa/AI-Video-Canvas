@@ -14,6 +14,18 @@ pub struct ProjectSummaryRecord {
     pub created_at: i64,
     pub updated_at: i64,
     pub node_count: i64,
+    pub project_group_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectGroupRecord {
+    pub id: String,
+    pub name: String,
+    pub project_count: i64,
+    pub sort_order: i64,
+    pub created_at: i64,
+    pub updated_at: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -63,11 +75,21 @@ fn ensure_projects_table(conn: &Connection) -> Result<(), String> {
           PRIMARY KEY(project_id, path)
         );
         CREATE INDEX IF NOT EXISTS idx_project_image_refs_path ON project_image_refs(path);
+        CREATE TABLE IF NOT EXISTS project_groups (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_project_groups_updated_at ON project_groups(updated_at DESC);
         "#,
     )
     .map_err(|e| format!("Failed to initialize projects table: {}", e))?;
 
+    // Check for missing columns
     let mut has_node_count = false;
+    let mut has_group_id = false;
     let mut stmt = conn
         .prepare("PRAGMA table_info(projects)")
         .map_err(|e| format!("Failed to inspect projects schema: {}", e))?;
@@ -80,7 +102,8 @@ fn ensure_projects_table(conn: &Connection) -> Result<(), String> {
             name_result.map_err(|e| format!("Failed to read projects column name: {}", e))?;
         if column_name == "node_count" {
             has_node_count = true;
-            break;
+        } else if column_name == "project_group_id" {
+            has_group_id = true;
         }
     }
 
@@ -90,6 +113,14 @@ fn ensure_projects_table(conn: &Connection) -> Result<(), String> {
             [],
         )
         .map_err(|e| format!("Failed to add node_count column: {}", e))?;
+    }
+
+    if !has_group_id {
+        conn.execute(
+            "ALTER TABLE projects ADD COLUMN project_group_id TEXT",
+            [],
+        )
+        .map_err(|e| format!("Failed to add project_group_id column: {}", e))?;
     }
 
     Ok(())
@@ -270,7 +301,8 @@ pub fn list_project_summaries(app: AppHandle) -> Result<Vec<ProjectSummaryRecord
               name,
               created_at,
               updated_at,
-              node_count
+              node_count,
+              project_group_id
             FROM projects
             ORDER BY updated_at DESC
             "#,
@@ -285,6 +317,7 @@ pub fn list_project_summaries(app: AppHandle) -> Result<Vec<ProjectSummaryRecord
                 created_at: row.get(2)?,
                 updated_at: row.get(3)?,
                 node_count: row.get(4)?,
+                project_group_id: row.get(5)?,
             })
         })
         .map_err(|e| format!("Failed to query project summaries: {}", e))?;
@@ -460,5 +493,143 @@ pub fn delete_project_record(app: AppHandle, project_id: String) -> Result<(), S
         .map_err(|e| format!("Failed to commit delete transaction: {}", e))?;
 
     prune_unreferenced_images(&app)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn list_project_groups(app: AppHandle) -> Result<Vec<ProjectGroupRecord>, String> {
+    let conn = open_db(&app)?;
+    let mut stmt = conn
+        .prepare(
+            r#"
+            SELECT
+              g.id,
+              g.name,
+              COALESCE((SELECT COUNT(*) FROM projects p WHERE p.project_group_id = g.id), 0) AS project_count,
+              g.sort_order,
+              g.created_at,
+              g.updated_at
+            FROM project_groups g
+            ORDER BY g.sort_order ASC, g.created_at ASC
+            "#,
+        )
+        .map_err(|e| format!("Failed to prepare list groups query: {}", e))?;
+
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(ProjectGroupRecord {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                project_count: row.get(2)?,
+                sort_order: row.get(3)?,
+                created_at: row.get(4)?,
+                updated_at: row.get(5)?,
+            })
+        })
+        .map_err(|e| format!("Failed to query project groups: {}", e))?;
+
+    let mut groups = Vec::new();
+    for row in rows {
+        groups.push(row.map_err(|e| format!("Failed to decode group row: {}", e))?);
+    }
+    Ok(groups)
+}
+
+#[tauri::command]
+pub fn create_project_group(
+    app: AppHandle,
+    id: String,
+    name: String,
+    created_at: i64,
+) -> Result<(), String> {
+    let conn = open_db(&app)?;
+    let max_order: i64 = conn
+        .query_row(
+            "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM project_groups",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+
+    conn.execute(
+        "INSERT INTO project_groups (id, name, sort_order, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![id, name, max_order, created_at, created_at],
+    )
+    .map_err(|e| format!("Failed to create project group: {}", e))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn rename_project_group(
+    app: AppHandle,
+    group_id: String,
+    name: String,
+    updated_at: i64,
+) -> Result<(), String> {
+    let conn = open_db(&app)?;
+    conn.execute(
+        "UPDATE project_groups SET name = ?1, updated_at = ?2 WHERE id = ?3",
+        params![name, updated_at, group_id],
+    )
+    .map_err(|e| format!("Failed to rename project group: {}", e))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn delete_project_group(
+    app: AppHandle,
+    group_id: String,
+    delete_projects: bool,
+) -> Result<(), String> {
+    let mut conn = open_db(&app)?;
+    let tx = conn
+        .transaction()
+        .map_err(|e| format!("Failed to begin delete group transaction: {}", e))?;
+
+    if delete_projects {
+        tx.execute(
+            "DELETE FROM project_image_refs WHERE project_id IN (SELECT id FROM projects WHERE project_group_id = ?1)",
+            params![group_id],
+        )
+        .map_err(|e| format!("Failed to delete group project image refs: {}", e))?;
+
+        tx.execute(
+            "DELETE FROM projects WHERE project_group_id = ?1",
+            params![group_id],
+        )
+        .map_err(|e| format!("Failed to delete group projects: {}", e))?;
+    } else {
+        tx.execute(
+            "UPDATE projects SET project_group_id = NULL WHERE project_group_id = ?1",
+            params![group_id],
+        )
+        .map_err(|e| format!("Failed to unlink projects from group: {}", e))?;
+    }
+
+    tx.execute(
+        "DELETE FROM project_groups WHERE id = ?1",
+        params![group_id],
+    )
+    .map_err(|e| format!("Failed to delete project group: {}", e))?;
+
+    tx.commit()
+        .map_err(|e| format!("Failed to commit delete group transaction: {}", e))?;
+
+    prune_unreferenced_images(&app)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn assign_project_to_group(
+    app: AppHandle,
+    project_id: String,
+    group_id: Option<String>,
+) -> Result<(), String> {
+    let conn = open_db(&app)?;
+    conn.execute(
+        "UPDATE projects SET project_group_id = ?1 WHERE id = ?2",
+        params![group_id, project_id],
+    )
+    .map_err(|e| format!("Failed to assign project to group: {}", e))?;
     Ok(())
 }

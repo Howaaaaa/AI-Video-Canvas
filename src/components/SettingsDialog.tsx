@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
-import { X, Eye, EyeOff, FolderOpen, Plus, Trash2 } from 'lucide-react';
+import { X, Eye, EyeOff, FolderOpen, Plus, Trash2, Settings, Key, HardDrive, Palette, DollarSign, FlaskConical, Info } from 'lucide-react';
 import { Trans, useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -423,6 +423,7 @@ export function SettingsDialog({
                   }
               `}
               >
+                <Settings className="w-4 h-4 shrink-0" />
                 <span className="text-sm">{t('settings.general')}</span>
               </button>
 
@@ -437,6 +438,7 @@ export function SettingsDialog({
                   }
               `}
               >
+                <Key className="w-4 h-4 shrink-0" />
                 <span className="text-sm">{t('settings.providers')}</span>
               </button>
 
@@ -451,6 +453,7 @@ export function SettingsDialog({
                   }
               `}
               >
+                <HardDrive className="w-4 h-4 shrink-0" />
                 <span className="text-sm">{t('settings.storage')}</span>
               </button>
 
@@ -465,6 +468,7 @@ export function SettingsDialog({
                   }
               `}
               >
+                <Palette className="w-4 h-4 shrink-0" />
                 <span className="text-sm">{t('settings.appearance')}</span>
               </button>
 
@@ -479,6 +483,7 @@ export function SettingsDialog({
                   }
               `}
               >
+                <DollarSign className="w-4 h-4 shrink-0" />
                 <span className="text-sm">{t('settings.pricing')}</span>
               </button>
 
@@ -493,6 +498,7 @@ export function SettingsDialog({
                   }
               `}
               >
+                <FlaskConical className="w-4 h-4 shrink-0" />
                 <span className="text-sm">{t('settings.experimental')}</span>
               </button>
 
@@ -507,6 +513,7 @@ export function SettingsDialog({
                   }
               `}
               >
+                <Info className="w-4 h-4 shrink-0" />
                 <span className="text-sm">{t('settings.about')}</span>
               </button>
             </nav>

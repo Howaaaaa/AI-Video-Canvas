@@ -9,9 +9,14 @@ import {
   type CanvasNodeData,
 } from './canvasStore';
 import {
+  assignProjectToGroup,
+  createProjectGroup,
+  deleteProjectGroup,
   deleteProjectRecord,
   getProjectRecord,
+  listProjectGroups,
   listProjectSummaries,
+  renameProjectGroup,
   renameProjectRecord,
   updateProjectViewportRecord,
   upsertProjectRecord,
@@ -58,6 +63,7 @@ export interface ProjectSummary {
   createdAt: number;
   updatedAt: number;
   nodeCount: number;
+  projectGroupId?: string | null;
 }
 
 export interface Project extends ProjectSummary {
@@ -65,6 +71,15 @@ export interface Project extends ProjectSummary {
   edges: CanvasEdge[];
   viewport: Viewport;
   history: CanvasHistoryState;
+}
+
+export interface ProjectGroup {
+  id: string;
+  name: string;
+  projectCount: number;
+  sortOrder: number;
+  createdAt: number;
+  updatedAt: number;
 }
 
 type PersistedProject = Project & {
@@ -285,6 +300,7 @@ function toProjectSummary(record: ProjectSummaryRecord): ProjectSummary {
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
     nodeCount: record.nodeCount,
+    projectGroupId: record.projectGroupId ?? null,
   };
 }
 
@@ -584,23 +600,30 @@ function updateProjectSummary(
   summaries: ProjectSummary[],
   updated: ProjectSummary
 ): ProjectSummary[] {
-  const next = summaries.map((summary) => (summary.id === updated.id ? updated : summary));
+  const next = summaries.map((summary) =>
+    summary.id === updated.id
+      ? { ...updated, projectGroupId: updated.projectGroupId ?? summary.projectGroupId }
+      : summary
+  );
   next.sort((a, b) => b.updatedAt - a.updatedAt);
   return next;
 }
 
 interface ProjectState {
   projects: ProjectSummary[];
+  groups: ProjectGroup[];
   currentProjectId: string | null;
   currentProject: Project | null;
+  /** Set when a project was opened from a group detail view */
+  sourceGroupId: string | null;
   isHydrated: boolean;
   isOpeningProject: boolean;
 
   hydrate: () => Promise<void>;
-  createProject: (name: string) => string;
+  createProject: (name: string, groupId?: string | null) => string;
   deleteProject: (id: string) => void;
   renameProject: (id: string, name: string) => void;
-  openProject: (id: string) => void;
+  openProject: (id: string, fromGroupId?: string | null) => void;
   closeProject: () => void;
   getCurrentProject: () => Project | null;
   saveCurrentProject: (
@@ -611,12 +634,20 @@ interface ProjectState {
   ) => void;
   saveCurrentProjectViewport: (viewport: Viewport) => void;
   cancelPendingViewportPersist: () => void;
+
+  /* Project groups */
+  createGroup: (name: string) => string;
+  renameGroup: (id: string, name: string) => void;
+  deleteGroup: (id: string, deleteProjects: boolean) => void;
+  assignProjectToGroup: (projectId: string, groupId: string | null) => void;
 }
 
 export const useProjectStore = create<ProjectState>((set, get) => ({
   projects: [],
+  groups: [],
   currentProjectId: null,
   currentProject: null,
+  sourceGroupId: null,
   isHydrated: false,
   isOpeningProject: false,
 
@@ -626,10 +657,14 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }
 
     try {
-      const records = await listProjectSummaries();
+      const [records, groupRecords] = await Promise.all([
+        listProjectSummaries(),
+        listProjectGroups(),
+      ]);
       const projects = records.map(toProjectSummary).sort((a, b) => b.updatedAt - a.updatedAt);
       set({
         projects,
+        groups: groupRecords,
         currentProjectId: null,
         currentProject: null,
         isHydrated: true,
@@ -638,6 +673,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       console.error('Failed to hydrate project summaries from SQLite', error);
       set({
         projects: [],
+        groups: [],
         currentProjectId: null,
         currentProject: null,
         isHydrated: true,
@@ -645,7 +681,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }
   },
 
-  createProject: (name) => {
+  createProject: (name, groupId) => {
     const id = uuidv4();
     const now = Date.now();
     const project: Project = {
@@ -658,10 +694,16 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       edges: [],
       viewport: DEFAULT_VIEWPORT,
       history: createEmptyHistory(),
+      projectGroupId: groupId ?? undefined,
     };
 
     set((state) => ({
       projects: [{ ...project }, ...state.projects],
+      groups: groupId
+        ? state.groups.map((g) =>
+            g.id === groupId ? { ...g, projectCount: g.projectCount + 1 } : g
+          )
+        : state.groups,
       currentProjectId: id,
       currentProject: project,
       isOpeningProject: false,
@@ -671,8 +713,16 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 
   deleteProject: (id) => {
+    const deleted = get().projects.find((p) => p.id === id);
+    const deletedGroupId = deleted?.projectGroupId;
+
     set((state) => ({
       projects: state.projects.filter((project) => project.id !== id),
+      groups: deletedGroupId
+        ? state.groups.map((g) =>
+            g.id === deletedGroupId ? { ...g, projectCount: Math.max(0, g.projectCount - 1) } : g
+          )
+        : state.groups,
       currentProjectId: state.currentProjectId === id ? null : state.currentProjectId,
       currentProject: state.currentProject?.id === id ? null : state.currentProject,
       isOpeningProject: false,
@@ -719,10 +769,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     });
   },
 
-  openProject: (id) => {
+  openProject: (id, fromGroupId) => {
     const reqSeq = ++openProjectRequestSeq;
     useCanvasStore.getState().closeImageViewer();
-    set({ isOpeningProject: true });
+    set({ isOpeningProject: true, sourceGroupId: fromGroupId ?? null });
 
     void (async () => {
       try {
@@ -792,6 +842,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         : state.projects,
       currentProjectId: null,
       currentProject: null,
+      sourceGroupId: null,
       isOpeningProject: false,
     }));
   },
@@ -881,5 +932,85 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       return;
     }
     clearQueuedViewportUpsert(currentProjectId);
+  },
+
+  /* ── Project Groups ── */
+
+  createGroup: (name) => {
+    const id = uuidv4();
+    const now = Date.now();
+    const group: ProjectGroup = {
+      id,
+      name,
+      projectCount: 0,
+      sortOrder: 0,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    set((state) => ({
+      groups: [...state.groups, group],
+    }));
+    void createProjectGroup(id, name, now).catch((error) => {
+      console.error('Failed to create project group', error);
+    });
+    return id;
+  },
+
+  renameGroup: (id, name) => {
+    const now = Date.now();
+    set((state) => ({
+      groups: state.groups.map((g) =>
+        g.id === id ? { ...g, name, updatedAt: now } : g
+      ),
+    }));
+    void renameProjectGroup(id, name, now).catch((error) => {
+      console.error('Failed to rename project group', error);
+    });
+  },
+
+  deleteGroup: (id, deleteProjects) => {
+    const group = get().groups.find((g) => g.id === id);
+    if (!group) return;
+
+    set((state) => ({
+      groups: state.groups.filter((g) => g.id !== id),
+      projects: deleteProjects
+        ? state.projects.filter((p) => p.projectGroupId !== id)
+        : state.projects.map((p) =>
+            p.projectGroupId === id ? { ...p, projectGroupId: null } : p
+          ),
+    }));
+    void deleteProjectGroup(id, deleteProjects).catch((error) => {
+      console.error('Failed to delete project group', error);
+    });
+  },
+
+  assignProjectToGroup: (projectId, groupId) => {
+    set((state) => {
+      const project = state.projects.find((p) => p.id === projectId);
+      if (!project) return state;
+
+      const oldGroupId = project.projectGroupId;
+      const now = Date.now();
+
+      return {
+        projects: state.projects.map((p) =>
+          p.id === projectId ? { ...p, projectGroupId: groupId, updatedAt: now } : p
+        ),
+        groups: state.groups.map((g) => {
+          if (g.id === oldGroupId) {
+            return { ...g, projectCount: Math.max(0, g.projectCount - 1) };
+          }
+          if (g.id === groupId) {
+            return { ...g, projectCount: g.projectCount + 1 };
+          }
+          return g;
+        }),
+      };
+    });
+    void assignProjectToGroup(projectId, groupId).catch((error) => {
+      console.error('Failed to assign project to group', error);
+    });
   },
 }));

@@ -195,6 +195,11 @@ pub fn run() {
             project_state::update_project_viewport_record,
             project_state::rename_project_record,
             project_state::delete_project_record,
+            project_state::list_project_groups,
+            project_state::create_project_group,
+            project_state::rename_project_group,
+            project_state::delete_project_group,
+            project_state::assign_project_to_group,
             system::get_runtime_system_info,
             update::check_latest_release_tag,
         ])

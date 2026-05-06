@@ -1,64 +1,46 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import {
-  CheckSquare,
-  Folder,
-  FolderKanban,
-  FolderOpen,
-  FolderPlus,
-  Pencil,
-  Plus,
-  Square,
-  Trash2,
-} from 'lucide-react';
+import { CheckSquare, Folder, FolderOpen, Pencil, Plus, Square, Trash2 } from 'lucide-react';
 import { useProjectStore } from '@/stores/projectStore';
 import { getConfiguredApiKeyCount, useSettingsStore } from '@/stores/settingsStore';
-import { UiSelect } from '@/components/ui/primitives';
+import { UiButton, UiSelect } from '@/components/ui/primitives';
 import { MissingApiKeyHint } from '@/features/settings/MissingApiKeyHint';
 import { listModelProviders } from '@/features/canvas/models';
 import { RenameDialog } from './RenameDialog';
 import { projectEmoji } from './projectEmoji';
 
-interface ProjectManagerProps {
-  onGroupSelect: (groupId: string) => void;
+interface GroupDetailProps {
+  groupId: string;
+  onBack: () => void;
 }
 
 type ProjectSortField = 'name' | 'createdAt' | 'updatedAt';
 type SortDirection = 'asc' | 'desc';
 
-export function ProjectManager({ onGroupSelect }: ProjectManagerProps) {
+export function GroupDetail({ groupId, onBack }: GroupDetailProps) {
   const { t } = useTranslation();
   const [showRenameDialog, setShowRenameDialog] = useState(false);
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
   const [editingProjectName, setEditingProjectName] = useState('');
   const [sortField, setSortField] = useState<ProjectSortField>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
-  const [deleteGroupId, setDeleteGroupId] = useState<string | null>(null);
-  const [dragOverGroupId, setDragOverGroupId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmDeleteIds, setConfirmDeleteIds] = useState<Set<string> | null>(null);
-  const dragProjectRef = useRef<string | null>(null);
   const providerIds = useMemo(() => listModelProviders().map((provider) => provider.id), []);
   const configuredApiKeyCount = useSettingsStore((state) =>
     getConfiguredApiKeyCount(state.apiKeys, providerIds)
   );
 
-  const {
-    projects,
-    groups,
-    openProject,
-    deleteProject,
-    renameProject,
-    createProject,
-    createGroup,
-    renameGroup,
-    deleteGroup,
-    assignProjectToGroup,
-  } = useProjectStore();
-
-  const unclassifiedProjects = useMemo(
-    () => projects.filter((p) => !p.projectGroupId),
-    [projects]
+  const { projects, groups, openProject, deleteProject, renameProject, createProject, assignProjectToGroup } =
+    useProjectStore();
+  const group = groups.find((g) => g.id === groupId);
+  const groupProjects = useMemo(
+    () => projects.filter((p) => p.projectGroupId === groupId),
+    [projects, groupId]
+  );
+  const otherGroups = useMemo(
+    () => groups.filter((g) => g.id !== groupId),
+    [groups, groupId]
   );
 
   const isSelecting = selectedIds.size > 0;
@@ -81,13 +63,27 @@ export function ProjectManager({ onGroupSelect }: ProjectManagerProps) {
     });
   }, []);
 
+  const handleProjectClick = useCallback(
+    (projectId: string) => {
+      if (!isSelecting) {
+        openProject(projectId, groupId);
+      }
+    },
+    [isSelecting, openProject, groupId]
+  );
+
   const handleBulkMoveToGroup = useCallback(
-    (groupId: string | null) => {
-      selectedIds.forEach((pid) => assignProjectToGroup(pid, groupId));
+    (targetGroupId: string) => {
+      selectedIds.forEach((pid) => assignProjectToGroup(pid, targetGroupId));
       exitSelectMode();
     },
     [selectedIds, assignProjectToGroup, exitSelectMode]
   );
+
+  const handleBulkRemoveFromGroup = useCallback(() => {
+    selectedIds.forEach((pid) => assignProjectToGroup(pid, null));
+    exitSelectMode();
+  }, [selectedIds, assignProjectToGroup, exitSelectMode]);
 
   const handleBulkDelete = useCallback(() => {
     setConfirmDeleteIds(new Set(selectedIds));
@@ -106,24 +102,10 @@ export function ProjectManager({ onGroupSelect }: ProjectManagerProps) {
     setShowRenameDialog(true);
   };
 
-  const handleCreateGroup = () => {
-    const name = t('project.newGroup');
-    createGroup(name);
-  };
-
   const handleRenameClick = (id: string, name: string, e: React.MouseEvent) => {
     e.stopPropagation();
     setEditingProjectId(id);
     setEditingProjectName(name);
-    setShowRenameDialog(true);
-  };
-
-  const handleGroupRenameClick = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    const group = groups.find((g) => g.id === id);
-    if (!group) return;
-    setEditingProjectId(`group:${id}`);
-    setEditingProjectName(group.name);
     setShowRenameDialog(true);
   };
 
@@ -132,25 +114,11 @@ export function ProjectManager({ onGroupSelect }: ProjectManagerProps) {
     setConfirmDeleteIds(new Set([id]));
   };
 
-  const handleGroupDeleteClick = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setDeleteGroupId(id);
-  };
-
-  const handleConfirmGroupDelete = (deleteProjects: boolean) => {
-    if (!deleteGroupId) return;
-    deleteGroup(deleteGroupId, deleteProjects);
-    setDeleteGroupId(null);
-  };
-
   const handleConfirm = (name: string) => {
-    if (editingProjectId?.startsWith('group:')) {
-      const groupId = editingProjectId.slice(6);
-      renameGroup(groupId, name);
-    } else if (editingProjectId) {
+    if (editingProjectId) {
       renameProject(editingProjectId, name);
     } else {
-      createProject(name);
+      createProject(name, groupId);
     }
   };
 
@@ -158,8 +126,8 @@ export function ProjectManager({ onGroupSelect }: ProjectManagerProps) {
     return new Date(timestamp).toLocaleDateString();
   };
 
-  const sortedUnclassified = useMemo(() => {
-    const list = [...unclassifiedProjects];
+  const sortedProjects = useMemo(() => {
+    const list = [...groupProjects];
     const direction = sortDirection === 'asc' ? 1 : -1;
 
     list.sort((a, b) => {
@@ -173,71 +141,42 @@ export function ProjectManager({ onGroupSelect }: ProjectManagerProps) {
     });
 
     return list;
-  }, [unclassifiedProjects, sortDirection, sortField]);
-
-  // Drag and drop handlers
-  const handleDragStart = (projectId: string) => (e: React.DragEvent) => {
-    dragProjectRef.current = projectId;
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', projectId);
-  };
-
-  const handleGroupDragOver = (groupId: string) => (e: React.DragEvent) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    setDragOverGroupId(groupId);
-  };
-
-  const handleGroupDragLeave = () => {
-    setDragOverGroupId(null);
-  };
-
-  const handleGroupDrop = (groupId: string) => (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOverGroupId(null);
-    const projectId = e.dataTransfer.getData('text/plain') || dragProjectRef.current;
-    if (projectId) {
-      assignProjectToGroup(projectId, groupId);
-    }
-    dragProjectRef.current = null;
-  };
-
-  const getSortedGroups = useMemo(() => {
-    return [...groups].sort((a, b) => a.sortOrder - b.sortOrder);
-  }, [groups]);
-
-  const handleProjectClick = useCallback(
-    (projectId: string) => {
-      if (!isSelecting) {
-        openProject(projectId);
-      }
-    },
-    [isSelecting, openProject]
-  );
+  }, [groupProjects, sortDirection, sortField]);
 
   const handleSelectAll = () => {
-    if (selectedIds.size === unclassifiedProjects.length) {
+    if (selectedIds.size === groupProjects.length) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(unclassifiedProjects.map((p) => p.id)));
+      setSelectedIds(new Set(groupProjects.map((p) => p.id)));
     }
   };
 
   return (
     <div className="ui-scrollbar h-full w-full overflow-auto p-8">
       <div className="max-w-5xl mx-auto">
-        {/* Header: title + subtitle */}
+        {/* Header: breadcrumb + title + subtitle */}
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2.5">
-            <FolderKanban className="w-6 h-6 text-accent" />
-            <h1 className="text-2xl font-bold text-text-dark">{t('project.title')}</h1>
+            <button
+              type="button"
+              onClick={onBack}
+              className="flex items-center gap-1 text-text-muted hover:text-text-dark transition-colors text-sm"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+              {t('project.title')}
+            </button>
+            <svg className="w-4 h-4 text-text-muted/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+            <h1 className="text-2xl font-bold text-text-dark">
+              {group?.name ?? ''}
+            </h1>
           </div>
           <p className="text-sm text-text-muted flex items-center gap-1.5">
-            <FolderOpen className="w-3.5 h-3.5" />
-            {t('project.projectCount', {
-              projectCount: projects.length,
-              groupCount: groups.length,
-            })}
+            <Folder className="w-3.5 h-3.5" />
+            {t('project.groupProjectCountOnly', { count: groupProjects.length })}
           </p>
         </div>
 
@@ -267,25 +206,34 @@ export function ProjectManager({ onGroupSelect }: ProjectManagerProps) {
           <div className="flex items-center gap-2">
             {selectedCount > 0 && (
               <>
-                <UiSelect
-                  value=""
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    if (val) {
-                      handleBulkMoveToGroup(val);
-                    }
-                  }}
-                  className="h-8 w-auto min-w-[120px] rounded-lg text-xs"
-                >
-                  <option value="" disabled>
-                    {t('project.moveToGroup')}
-                  </option>
-                  {groups.map((g) => (
-                    <option key={g.id} value={g.id}>
-                      {g.name}
+                {otherGroups.length > 0 && (
+                  <UiSelect
+                    value=""
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val) {
+                        handleBulkMoveToGroup(val);
+                      }
+                    }}
+                    className="h-8 w-auto min-w-[120px] rounded-lg text-xs"
+                  >
+                    <option value="" disabled>
+                      {t('project.moveToGroup')}
                     </option>
-                  ))}
-                </UiSelect>
+                    {otherGroups.map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.name}
+                      </option>
+                    ))}
+                  </UiSelect>
+                )}
+                <button
+                  type="button"
+                  onClick={handleBulkRemoveFromGroup}
+                  className="flex items-center h-8 px-3 rounded-lg text-xs text-text-dark border border-border-dark hover:bg-bg-dark transition-colors"
+                >
+                  {t('project.removeFromGroup')}
+                </button>
                 <button
                   type="button"
                   onClick={handleBulkDelete}
@@ -307,101 +255,16 @@ export function ProjectManager({ onGroupSelect }: ProjectManagerProps) {
                 <div className="h-5 w-px bg-border-dark" />
               </>
             )}
-            <button
-              type="button"
-              onClick={handleCreateGroup}
-              className="flex items-center gap-1.5 h-9 px-3 rounded-lg text-sm text-accent bg-accent/8 border border-accent/30 hover:bg-accent/15 transition-colors"
-            >
-              <FolderPlus className="w-4 h-4" />
-              {t('project.newGroup')}
-            </button>
-            <button
-              type="button"
-              onClick={handleCreateProject}
-              className="flex items-center gap-1.5 h-9 px-3 rounded-lg text-sm bg-accent text-white hover:bg-accent/85 transition-colors"
-            >
-              <Plus className="w-4 h-4" />
+            <UiButton type="button" variant="primary" onClick={handleCreateProject} className="gap-2">
+              <Plus className="w-5 h-5" />
               {t('project.newProject')}
-            </button>
+            </UiButton>
           </div>
         </div>
 
         {configuredApiKeyCount === 0 && <MissingApiKeyHint className="mb-8" />}
 
-        {/* Project groups section */}
-        {getSortedGroups.length > 0 && (
-          <div className="mb-10">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {getSortedGroups.map((group) => {
-                const isDragOver = dragOverGroupId === group.id;
-                return (
-                  <div
-                    key={group.id}
-                    onClick={() => onGroupSelect(group.id)}
-                    onDragOver={handleGroupDragOver(group.id)}
-                    onDragLeave={handleGroupDragLeave}
-                    onDrop={handleGroupDrop(group.id)}
-                    className={`
-                      relative rounded-lg p-4 pl-5 cursor-pointer transition-all group overflow-hidden border border-border-dark hover:shadow-lg
-                      ${isDragOver
-                        ? 'border-accent bg-accent/10 shadow-[0_0_12px_rgba(59,130,246,0.25)]'
-                        : 'bg-orange-500/10'
-                      }
-                    `}
-                  >
-                    <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-accent/40 group-hover:bg-accent/70 transition-colors" />
-                    <div className="flex items-start justify-between mb-2">
-                      <div className="flex items-center gap-2 min-w-0 flex-1">
-                        <Folder className="w-5 h-5 shrink-0 text-accent" />
-                        <h3 className="font-semibold text-text-dark truncate">
-                          {group.name}
-                        </h3>
-                      </div>
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                        <button
-                          type="button"
-                          onClick={(e) => handleGroupRenameClick(group.id, e)}
-                          className="p-1 hover:bg-bg-dark rounded"
-                          title={t('project.rename')}
-                        >
-                          <Pencil className="w-4 h-4 text-text-muted hover:text-text-dark" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => handleGroupDeleteClick(group.id, e)}
-                          className="p-1 hover:bg-bg-dark rounded"
-                          title={t('project.delete')}
-                        >
-                          <Trash2 className="w-4 h-4 text-text-muted hover:text-red-500" />
-                        </button>
-                      </div>
-                    </div>
-                    <p className="text-xs text-text-muted">
-                      {t('project.groupProjectCount', { count: group.projectCount })}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Divider */}
-        {getSortedGroups.length > 0 && unclassifiedProjects.length > 0 && (
-          <div className="relative mb-8">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-border-dark" />
-            </div>
-            <div className="relative flex justify-center">
-              <span className="bg-bg-dark px-4 text-xs text-text-muted">
-                {t('project.unclassified')}
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* Unclassified projects */}
-        {unclassifiedProjects.length === 0 && getSortedGroups.length === 0 ? (
+        {groupProjects.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-text-muted">
             <FolderOpen className="w-16 h-16 mb-4 opacity-50" />
             <p className="text-lg">{t('project.empty')}</p>
@@ -410,33 +273,31 @@ export function ProjectManager({ onGroupSelect }: ProjectManagerProps) {
         ) : (
           <>
             {/* Select-all hint */}
-            {isSelecting && unclassifiedProjects.length > 0 && (
+            {isSelecting && groupProjects.length > 0 && (
               <div className="mb-3 text-xs text-text-muted flex items-center gap-2">
                 <button
                   type="button"
                   onClick={handleSelectAll}
                   className="flex items-center gap-1 hover:text-text-dark transition-colors"
                 >
-                  {selectedIds.size === unclassifiedProjects.length ? (
+                  {selectedIds.size === groupProjects.length ? (
                     <CheckSquare className="w-3.5 h-3.5" />
                   ) : (
                     <Square className="w-3.5 h-3.5" />
                   )}
-                  {selectedIds.size === unclassifiedProjects.length
+                  {selectedIds.size === groupProjects.length
                     ? t('common.cancel')
                     : t('project.selectAll')}
                 </button>
               </div>
             )}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {sortedUnclassified.map((project) => {
+              {sortedProjects.map((project) => {
                 const isSelected = selectedIds.has(project.id);
                 return (
                   <div
                     key={project.id}
                     onClick={() => handleProjectClick(project.id)}
-                    draggable={!isSelecting}
-                    onDragStart={!isSelecting ? handleDragStart(project.id) : undefined}
                     className={`
                       relative rounded-lg p-4 pl-5 transition-all group overflow-hidden cursor-pointer hover:shadow-lg
                       ${isSelected
@@ -552,58 +413,9 @@ export function ProjectManager({ onGroupSelect }: ProjectManagerProps) {
         </div>
       )}
 
-      {/* Delete group dialog */}
-      {deleteGroupId && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center">
-          <div
-            className="absolute inset-0 bg-black/50 transition-opacity duration-200"
-            onClick={() => setDeleteGroupId(null)}
-          />
-          <div className="relative w-80 rounded-lg border border-border-dark bg-surface-dark p-6 shadow-xl">
-            <h2 className="text-lg font-semibold text-text-dark mb-2">
-              {t('project.deleteGroupTitle')}
-            </h2>
-            <p className="text-sm text-text-muted mb-4">
-              {t('project.deleteGroupDesc', {
-                count: groups.find((g) => g.id === deleteGroupId)?.projectCount ?? 0,
-              })}
-            </p>
-            <div className="flex flex-col gap-2">
-              <button
-                type="button"
-                onClick={() => handleConfirmGroupDelete(false)}
-                className="w-full px-4 py-2 rounded bg-bg-dark text-text-dark hover:bg-surface-dark transition-colors text-sm"
-              >
-                {t('project.deleteGroupMoveProjects')}
-              </button>
-              <button
-                type="button"
-                onClick={() => handleConfirmGroupDelete(true)}
-                className="w-full px-4 py-2 rounded bg-red-500/15 text-red-300 hover:bg-red-500/25 transition-colors text-sm"
-              >
-                {t('project.deleteGroupDeleteProjects')}
-              </button>
-              <button
-                type="button"
-                onClick={() => setDeleteGroupId(null)}
-                className="w-full px-4 py-2 text-text-muted hover:text-text-dark transition-colors text-xs mt-1"
-              >
-                {t('common.cancel')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       <RenameDialog
         isOpen={showRenameDialog}
-        title={
-          editingProjectId?.startsWith('group:')
-            ? t('project.renameTitle')
-            : editingProjectId
-              ? t('project.renameTitle')
-              : t('project.newProjectTitle')
-        }
+        title={editingProjectId ? t('project.renameTitle') : t('project.newProjectTitle')}
         defaultValue={editingProjectName}
         onClose={() => setShowRenameDialog(false)}
         onConfirm={handleConfirm}

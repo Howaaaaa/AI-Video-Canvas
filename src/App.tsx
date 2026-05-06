@@ -8,6 +8,7 @@ import { PromptTemplateDialog } from './components/PromptTemplateDialog';
 import { UpdateAvailableDialog, type UpdateIgnoreMode } from './components/UpdateAvailableDialog';
 import { GlobalErrorDialog } from './components/GlobalErrorDialog';
 import { ProjectManager } from './features/project/ProjectManager';
+import { GroupDetail } from './features/project/GroupDetail';
 import { useThemeStore } from './stores/themeStore';
 import { useProjectStore } from './stores/projectStore';
 import { useSettingsStore } from './stores/settingsStore';
@@ -52,6 +53,7 @@ function App() {
   const [showPromptTemplates, setShowPromptTemplates] = useState(false);
   const [globalError, setGlobalError] = useState<GlobalErrorDialogDetail | null>(null);
 
+  const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
   const isHydrated = useProjectStore((state) => state.isHydrated);
   const hydrate = useProjectStore((state) => state.hydrate);
   const currentProjectId = useProjectStore((state) => state.currentProjectId);
@@ -219,12 +221,33 @@ function App() {
           onPromptTemplateClick={() => {
             setShowPromptTemplates(true);
           }}
-          showBackButton={!!currentProjectId}
-          onBackClick={closeProject}
+          showBackButton={!!currentProjectId || !!activeGroupId}
+          onBackClick={() => {
+            if (currentProjectId) {
+              const sourceGroupId = useProjectStore.getState().sourceGroupId;
+              closeProject();
+              if (sourceGroupId) {
+                setActiveGroupId(sourceGroupId);
+              }
+            } else if (activeGroupId) {
+              setActiveGroupId(null);
+            }
+          }}
         />
 
         <main className="flex-1 relative">
-          {currentProjectId ? <Canvas /> : <ProjectManager />}
+          {currentProjectId ? (
+            <Canvas />
+          ) : activeGroupId ? (
+            <GroupDetail
+              groupId={activeGroupId}
+              onBack={() => setActiveGroupId(null)}
+            />
+          ) : (
+            <ProjectManager
+              onGroupSelect={(groupId) => setActiveGroupId(groupId)}
+            />
+          )}
         </main>
 
         <SettingsDialog
