@@ -974,6 +974,43 @@ export const AiVideoNode = memo(({ id, data, selected, width, height }: AiVideoN
                         </label>
                       );
                     }
+                    if (def.type === 'enum' && def.options) {
+                      return (
+                        <div key={def.key}>
+                          <div className="mb-1 text-[11px] text-text-muted">{label}</div>
+                          <div className="overflow-x-auto rounded-lg border border-[rgba(255,255,255,0.1)] bg-bg-dark/65 p-1">
+                            <div className="flex gap-1 min-w-max">
+                              {def.options.map((option) => {
+                                const active = String(resolvedValue) === option.value;
+                                const optionLabel = option.labelKey ? t(option.labelKey) : option.label;
+                                return (
+                                  <button
+                                    key={option.value}
+                                    type="button"
+                                    className={`h-7 rounded-md px-2 text-xs transition-colors ${
+                                      active
+                                        ? 'bg-surface-dark text-text-dark'
+                                        : 'text-text-muted hover:bg-bg-dark'
+                                    }`}
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      updateNodeData(id, {
+                                        extraParams: {
+                                          ...(data.extraParams ?? {}),
+                                          [def.key]: option.value,
+                                        },
+                                      });
+                                    }}
+                                  >
+                                    {optionLabel}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
                     return null;
                   })}
                 </div>

@@ -6,6 +6,7 @@ use tokio::sync::RwLock;
 use tokio::time::{sleep, Duration};
 use tracing::info;
 
+use crate::ai::anime_stylize;
 use crate::ai::error::AIError;
 use crate::ai::{
     AIProvider, GenerateRequest, ProviderTaskHandle, ProviderTaskPollResult, ProviderTaskSubmission,
@@ -98,26 +99,67 @@ impl LemonDataProvider {
         }
     }
 
-    async fn upload_image_to_cos(&self, image_path: &str) -> Result<String, AIError> {
+    async fn upload_image_to_cos(
+        &self,
+        image_path: &str,
+        anime_stylize: Option<&str>,
+    ) -> Result<String, AIError> {
         // Read local file
         let bytes = if image_path.starts_with("file://") {
             let path = image_path.trim_start_matches("file://");
-            std::fs::read(urlencoding::decode(path).map(|p| p.into_owned()).unwrap_or_else(|_| path.to_string()))
-                .map_err(|e| AIError::Provider(format!("Failed to read image file: {}", e)))?
+            std::fs::read(
+                urlencoding::decode(path)
+                    .map(|p| p.into_owned())
+                    .unwrap_or_else(|_| path.to_string()),
+            )
+            .map_err(|e| AIError::Provider(format!("Failed to read image file: {}", e)))?
         } else {
             std::fs::read(image_path)
                 .map_err(|e| AIError::Provider(format!("Failed to read image file: {}", e)))?
         };
 
-        // Determine extension
-        let extension = if image_path.to_lowercase().ends_with(".png") {
-            "png"
-        } else if image_path.to_lowercase().ends_with(".webp") {
-            "webp"
-        } else if image_path.to_lowercase().ends_with(".gif") {
-            "gif"
+        // Apply AnimeGANv3 Shinkai style transfer if requested
+        let (bytes, extension) = if let Some(target_width) =
+            anime_stylize.and_then(|s: &str| s.parse::<u32>().ok())
+        {
+            let target_u32 = target_width;
+            match tokio::task::spawn_blocking(move || {
+                anime_stylize::stylize_image(&bytes, target_u32)
+            })
+            .await
+            {
+                Ok(Ok(stylized_bytes)) => {
+                    info!(
+                        "AnimeGAN stylization applied ({}px target, {} bytes)",
+                        target_u32,
+                        stylized_bytes.len()
+                    );
+                    (stylized_bytes, "jpg")
+                }
+                Ok(Err(e)) => {
+                    return Err(AIError::Provider(format!(
+                        "AnimeGAN stylization failed: {}",
+                        e
+                    )));
+                }
+                Err(join_err) => {
+                    return Err(AIError::Provider(format!(
+                        "AnimeGAN stylization task panicked: {}",
+                        join_err
+                    )));
+                }
+            }
         } else {
-            "jpg"
+            let ext = if image_path.to_lowercase().ends_with(".png") {
+                "png"
+            } else if image_path.to_lowercase().ends_with(".webp") {
+                "webp"
+            } else if image_path.to_lowercase().ends_with(".gif") {
+                "gif"
+            } else {
+                "jpg"
+            };
+            (bytes, ext)
         };
 
         self.cos_uploader
@@ -225,6 +267,19 @@ impl AIProvider for LemonDataProvider {
             .and_then(|raw| raw.as_str())
             .unwrap_or("480p");
 
+        // Parse anime_stylize from extra_params (seedance only)
+        let is_seedance = model == "seedance-2.0-fast" || model == "seedance-2.0";
+        let anime_stylize = if is_seedance {
+            request
+                .extra_params
+                .as_ref()
+                .and_then(|params| params.get("anime_stylize"))
+                .and_then(|raw| raw.as_str())
+                .filter(|s| *s != "off")
+        } else {
+            None
+        };
+
         // Build request body — veo3.1-fast has a different schema (no operation, no watermark)
         let mut body = if is_veo {
             json!({
@@ -258,13 +313,13 @@ impl AIProvider for LemonDataProvider {
                 // veo3.1-fast image fields: image, last_image, reference_images
                 match operation {
                     VideoOperation::ImageToVideo => {
-                        let cos_url = self.upload_image_to_cos(&reference_images[0]).await?;
+                        let cos_url = self.upload_image_to_cos(&reference_images[0], anime_stylize).await?;
                         body["image"] = json!(cos_url);
                     }
                     VideoOperation::StartEndToVideo => {
-                        let start_url = self.upload_image_to_cos(&reference_images[0]).await?;
+                        let start_url = self.upload_image_to_cos(&reference_images[0], anime_stylize).await?;
                         let end_url = if reference_images.len() > 1 {
-                            self.upload_image_to_cos(&reference_images[1]).await?
+                            self.upload_image_to_cos(&reference_images[1], anime_stylize).await?
                         } else {
                             start_url.clone()
                         };
@@ -272,12 +327,12 @@ impl AIProvider for LemonDataProvider {
                         body["last_image"] = json!(end_url);
                     }
                     VideoOperation::ReferenceToVideo => {
-                        let main_url = self.upload_image_to_cos(&reference_images[0]).await?;
+                        let main_url = self.upload_image_to_cos(&reference_images[0], anime_stylize).await?;
                         body["image"] = json!(main_url);
                         if reference_images.len() > 1 {
                             let mut ref_urls = Vec::new();
                             for image_path in reference_images.iter().skip(1).take(8) {
-                                let cos_url = self.upload_image_to_cos(image_path).await?;
+                                let cos_url = self.upload_image_to_cos(image_path, anime_stylize).await?;
                                 ref_urls.push(cos_url);
                             }
                             body["reference_images"] = json!(ref_urls);
@@ -295,13 +350,13 @@ impl AIProvider for LemonDataProvider {
 
                 match operation {
                     VideoOperation::ImageToVideo => {
-                        let cos_url = self.upload_image_to_cos(&reference_images[0]).await?;
+                        let cos_url = self.upload_image_to_cos(&reference_images[0], anime_stylize).await?;
                         body[image_key] = json!(cos_url);
                     }
                     VideoOperation::StartEndToVideo => {
-                        let start_url = self.upload_image_to_cos(&reference_images[0]).await?;
+                        let start_url = self.upload_image_to_cos(&reference_images[0], anime_stylize).await?;
                         let end_url = if reference_images.len() > 1 {
-                            self.upload_image_to_cos(&reference_images[1]).await?
+                            self.upload_image_to_cos(&reference_images[1], anime_stylize).await?
                         } else {
                             start_url.clone()
                         };
@@ -312,7 +367,7 @@ impl AIProvider for LemonDataProvider {
                         let key = reference_key.unwrap_or("reference_images");
                         let mut cos_urls = Vec::new();
                         for image_path in reference_images.iter().take(9) {
-                            let cos_url = self.upload_image_to_cos(image_path).await?;
+                            let cos_url = self.upload_image_to_cos(image_path, anime_stylize).await?;
                             cos_urls.push(cos_url);
                         }
                         body[key] = json!(cos_urls);
@@ -325,8 +380,8 @@ impl AIProvider for LemonDataProvider {
         let endpoint = format!("{}{}", LEMONDATA_BASE_URL, LEMONDATA_VIDEO_GENERATIONS_PATH);
 
         info!(
-            "[LemonData Request] model: {}, operation: {}, duration: {}s, aspect_ratio: {}, resolution: {}, output_audio: {}, images: {}",
-            model, operation_str, duration, request.aspect_ratio, resolution, output_audio, image_count
+            "[LemonData Request] model: {}, operation: {}, duration: {}s, aspect_ratio: {}, resolution: {}, output_audio: {}, anime_stylize: {:?}, images: {}",
+            model, operation_str, duration, request.aspect_ratio, resolution, output_audio, anime_stylize, image_count
         );
 
         let response = self

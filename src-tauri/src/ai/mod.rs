@@ -1,3 +1,4 @@
+pub mod anime_stylize;
 pub mod error;
 pub mod providers;
 

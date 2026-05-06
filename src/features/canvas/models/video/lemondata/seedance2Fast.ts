@@ -37,6 +37,19 @@ export const videoModel: VideoModelDefinition = {
   ],
   extraParamsSchema: [
     {
+      key: 'anime_stylize',
+      label: '绕开真人检测',
+      labelKey: 'modelParams.animeStylize',
+      type: 'enum',
+      defaultValue: '1280',
+      options: [
+        { value: 'off', label: '关闭', labelKey: 'modelParams.animeStylizeOff' },
+        { value: '1600', label: '轻度风格化', labelKey: 'modelParams.animeStylize1600' },
+        { value: '1280', label: '中度风格化', labelKey: 'modelParams.animeStylize1280' },
+        { value: '1024', label: '重度风格化', labelKey: 'modelParams.animeStylize1024' },
+      ],
+    },
+    {
       key: 'output_audio',
       label: 'Generate Audio',
       labelKey: 'modelParams.generateAudio',
@@ -45,6 +58,7 @@ export const videoModel: VideoModelDefinition = {
     },
   ],
   defaultExtraParams: {
+    anime_stylize: '1280',
     output_audio: true,
   },
   operations: [

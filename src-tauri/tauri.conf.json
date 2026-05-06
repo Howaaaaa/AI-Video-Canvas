@@ -47,6 +47,9 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "resources": {
+      "resources/*": "./"
+    },
     "windows": {
       "wix": {
         "language": "zh-CN"

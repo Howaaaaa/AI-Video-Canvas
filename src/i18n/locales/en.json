@@ -86,7 +86,12 @@
     "audio": "Audio",
     "bgm": "BGM",
     "outputAudio": "Generate Audio",
-    "generateAudio": "Generate Audio"
+    "generateAudio": "Generate Audio",
+    "animeStylize": "Bypass Face Detection",
+    "animeStylizeOff": "Off",
+    "animeStylize1600": "Mild Stylize",
+    "animeStylize1280": "Medium Stylize",
+    "animeStylize1024": "Heavy Stylize"
   },
   "node": {
     "menu": {
