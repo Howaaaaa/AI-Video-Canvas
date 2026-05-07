@@ -308,7 +308,7 @@ const aiChatNodeDefinition: CanvasNodeDefinition<AiChatNodeData> = {
     sourceHandle: false,
     targetHandle: true,
     connectMenu: {
-      fromSource: false,
+      fromSource: true,
       fromTarget: true,
     },
   },
