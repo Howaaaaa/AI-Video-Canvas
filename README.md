@@ -156,13 +156,15 @@ docs/development-guides/    # 开发与扩展文档
 详细指南：
 - [项目开发环境与注意事项](./docs/development-guides/project-development-setup.md)
 - [供应商与模型扩展指南](./docs/development-guides/provider-and-model-extension.md)
+- [文件引用追踪系统](./docs/reference-tracking-system.md) — 图片/视频文件的引用追踪、清理策略与扩展指南
 
 ## 持久化与数据说明
 
 - 自动持久化由 `projectStore` 驱动，不需要手动保存
 - SQLite 文件位于 Tauri `app_data_dir/projects.db`
 - `projects` 表核心字段：`nodes_json`、`edges_json`、`viewport_json`、`history_json`、`node_count`
-- 图片字段通过 `imagePool + __img_ref__` 去重编码
+- 图片与视频文件通过 `imagePool + __img_ref__` 去重编码，文件引用自动追踪至 `project_image_refs` / `project_video_refs` 表
+- 启动时自动清理孤儿文件（未被任何项目引用的图片和视频），保存时不做清理以避免竞争条件
 
 ## i18n 约定
 
