@@ -99,3 +99,8 @@ export async function assignProjectToGroup(
 export async function cleanupUnreferencedImages(): Promise<void> {
   await invoke('cleanup_unreferenced_images');
 }
+
+/** Clean up video files not referenced by any project. Safe to call on startup. */
+export async function cleanupUnreferencedVideos(): Promise<void> {
+  await invoke('cleanup_unreferenced_videos');
+}

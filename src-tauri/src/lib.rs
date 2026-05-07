@@ -201,6 +201,7 @@ pub fn run() {
             project_state::delete_project_group,
             project_state::assign_project_to_group,
             project_state::cleanup_unreferenced_images,
+            project_state::cleanup_unreferenced_videos,
             system::get_runtime_system_info,
             update::check_latest_release_tag,
         ])

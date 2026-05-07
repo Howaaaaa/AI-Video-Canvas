@@ -11,6 +11,7 @@ import {
 import {
   assignProjectToGroup,
   cleanupUnreferencedImages,
+  cleanupUnreferencedVideos,
   createProjectGroup,
   deleteProjectGroup,
   deleteProjectRecord,
@@ -667,6 +668,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       // Fire-and-forget: clean up orphaned images at startup (safe, no race with saves).
       cleanupUnreferencedImages().catch((error) => {
         console.warn('[projectStore] startup image cleanup failed (non-fatal):', error);
+      });
+      cleanupUnreferencedVideos().catch((error) => {
+        console.warn('[projectStore] startup video cleanup failed (non-fatal):', error);
       });
 
       set({

@@ -75,6 +75,12 @@ fn ensure_projects_table(conn: &Connection) -> Result<(), String> {
           PRIMARY KEY(project_id, path)
         );
         CREATE INDEX IF NOT EXISTS idx_project_image_refs_path ON project_image_refs(path);
+        CREATE TABLE IF NOT EXISTS project_video_refs (
+          project_id TEXT NOT NULL,
+          path TEXT NOT NULL,
+          PRIMARY KEY(project_id, path)
+        );
+        CREATE INDEX IF NOT EXISTS idx_project_video_refs_path ON project_video_refs(path);
         CREATE TABLE IF NOT EXISTS project_groups (
           id TEXT PRIMARY KEY,
           name TEXT NOT NULL,
@@ -170,7 +176,7 @@ fn collect_image_paths_from_nodes(
             None => continue,
         };
 
-        for key in ["imageUrl", "previewImageUrl"] {
+        for key in ["imageUrl", "previewImageUrl", "tinyPreviewImageUrl"] {
             if let Some(raw_value) = data.get(key).and_then(|value| value.as_str()) {
                 if let Some(path) = resolve_image_ref(raw_value, image_pool) {
                     paths.insert(path);
@@ -184,7 +190,7 @@ fn collect_image_paths_from_nodes(
                     Some(value) => value,
                     None => continue,
                 };
-                for key in ["imageUrl", "previewImageUrl"] {
+                for key in ["imageUrl", "previewImageUrl", "tinyPreviewImageUrl"] {
                     if let Some(raw_value) = frame_obj.get(key).and_then(|value| value.as_str()) {
                         if let Some(path) = resolve_image_ref(raw_value, image_pool) {
                             paths.insert(path);
@@ -222,6 +228,53 @@ fn extract_project_image_paths(nodes_json: &str, history_json: &str) -> HashSet<
     }
 
     paths
+}
+
+fn extract_project_video_paths(nodes_json: &str, history_json: &str) -> HashSet<String> {
+    let image_pool = parse_image_pool(history_json);
+    let mut paths = HashSet::new();
+
+    if let Ok(parsed_nodes) = serde_json::from_str::<serde_json::Value>(nodes_json) {
+        if let Some(nodes) = parsed_nodes.as_array() {
+            collect_video_paths_from_nodes(nodes, &image_pool, &mut paths);
+        }
+    }
+
+    if let Ok(parsed_history) = serde_json::from_str::<serde_json::Value>(history_json) {
+        for timeline_key in ["past", "future"] {
+            let Some(timeline) = parsed_history.get(timeline_key).and_then(|value| value.as_array()) else {
+                continue;
+            };
+
+            for snapshot in timeline {
+                let Some(nodes) = snapshot.get("nodes").and_then(|value| value.as_array()) else {
+                    continue;
+                };
+                collect_video_paths_from_nodes(nodes, &image_pool, &mut paths);
+            }
+        }
+    }
+
+    paths
+}
+
+fn collect_video_paths_from_nodes(
+    nodes: &[serde_json::Value],
+    image_pool: &[String],
+    paths: &mut HashSet<String>,
+) {
+    for node in nodes {
+        let data = match node.get("data").and_then(|value| value.as_object()) {
+            Some(value) => value,
+            None => continue,
+        };
+
+        if let Some(raw_value) = data.get("videoUrl").and_then(|value| value.as_str()) {
+            if let Some(path) = resolve_image_ref(raw_value, image_pool) {
+                paths.insert(path);
+            }
+        }
+    }
 }
 
 fn resolve_images_dir(app: &AppHandle) -> Result<PathBuf, String> {
@@ -271,6 +324,65 @@ fn prune_unreferenced_images(app: &AppHandle) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+fn resolve_videos_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to resolve app data dir: {}", e))?;
+
+    let videos_dir = app_data_dir.join("videos");
+    std::fs::create_dir_all(&videos_dir)
+        .map_err(|e| format!("Failed to create videos dir: {}", e))?;
+    Ok(videos_dir)
+}
+
+fn prune_unreferenced_videos(app: &AppHandle) -> Result<(), String> {
+    let conn = open_db(app)?;
+    let mut stmt = conn
+        .prepare("SELECT DISTINCT path FROM project_video_refs")
+        .map_err(|e| format!("Failed to prepare video refs query: {}", e))?;
+
+    let rows = stmt
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(|e| format!("Failed to query video refs: {}", e))?;
+
+    let mut referenced: HashSet<String> = HashSet::new();
+    for path_result in rows {
+        let path = path_result.map_err(|e| format!("Failed to decode video ref row: {}", e))?;
+        referenced.insert(path);
+    }
+
+    let videos_dir = resolve_videos_dir(app)?;
+    let entries = std::fs::read_dir(&videos_dir)
+        .map_err(|e| format!("Failed to read videos dir: {}", e))?;
+
+    for entry_result in entries {
+        let entry = entry_result.map_err(|e| format!("Failed to iterate videos dir: {}", e))?;
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+
+        let path_string = path.to_string_lossy().to_string();
+        if !referenced.contains(&path_string) {
+            std::fs::remove_file(&path)
+                .map_err(|e| format!("Failed to delete unreferenced video: {}", e))?;
+        }
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+pub fn cleanup_unreferenced_images(app: AppHandle) -> Result<(), String> {
+    prune_unreferenced_images(&app)
+}
+
+#[tauri::command]
+pub fn cleanup_unreferenced_videos(app: AppHandle) -> Result<(), String> {
+    prune_unreferenced_videos(&app)
 }
 
 fn open_db(app: &AppHandle) -> Result<Connection, String> {
@@ -380,6 +492,7 @@ pub fn get_project_record(
 pub fn upsert_project_record(app: AppHandle, record: ProjectRecord) -> Result<(), String> {
     let mut conn = open_db(&app)?;
     let image_paths = extract_project_image_paths(&record.nodes_json, &record.history_json);
+    let video_paths = extract_project_video_paths(&record.nodes_json, &record.history_json);
     let tx = conn
         .transaction()
         .map_err(|e| format!("Failed to begin transaction: {}", e))?;
@@ -436,10 +549,24 @@ pub fn upsert_project_record(app: AppHandle, record: ProjectRecord) -> Result<()
         .map_err(|e| format!("Failed to upsert project image ref: {}", e))?;
     }
 
+    tx.execute(
+        "DELETE FROM project_video_refs WHERE project_id = ?1",
+        params![record.id],
+    )
+    .map_err(|e| format!("Failed to clear project video refs: {}", e))?;
+
+    for path in video_paths {
+        tx.execute(
+            "INSERT OR IGNORE INTO project_video_refs (project_id, path) VALUES (?1, ?2)",
+            params![record.id, path],
+        )
+        .map_err(|e| format!("Failed to upsert project video ref: {}", e))?;
+    }
+
     tx.commit()
         .map_err(|e| format!("Failed to commit upsert transaction: {}", e))?;
 
-    // NOTE: prune_unreferenced_images intentionally NOT called here.
+    // NOTE: prune_unreferenced_images and prune_unreferenced_videos intentionally NOT called here.
     // Pruning during every save creates a race: a newly persisted image file may not
     // yet be referenced by any project's refs (due to save debouncing), causing it to
     // be deleted before the next save that registers it. This manifests as random
@@ -493,19 +620,18 @@ pub fn delete_project_record(app: AppHandle, project_id: String) -> Result<(), S
         params![project_id],
     )
     .map_err(|e| format!("Failed to delete project image refs: {}", e))?;
+    tx.execute(
+        "DELETE FROM project_video_refs WHERE project_id = ?1",
+        params![project_id],
+    )
+    .map_err(|e| format!("Failed to delete project video refs: {}", e))?;
 
     tx.commit()
         .map_err(|e| format!("Failed to commit delete transaction: {}", e))?;
 
     prune_unreferenced_images(&app)?;
+    prune_unreferenced_videos(&app)?;
     Ok(())
-}
-
-/// Cleans up image files that are no longer referenced by any project.
-/// Safe to call on app startup or manually.
-#[tauri::command]
-pub fn cleanup_unreferenced_images(app: AppHandle) -> Result<(), String> {
-    prune_unreferenced_images(&app)
 }
 
 #[tauri::command]
@@ -604,6 +730,11 @@ pub fn delete_project_group(
             params![group_id],
         )
         .map_err(|e| format!("Failed to delete group project image refs: {}", e))?;
+        tx.execute(
+            "DELETE FROM project_video_refs WHERE project_id IN (SELECT id FROM projects WHERE project_group_id = ?1)",
+            params![group_id],
+        )
+        .map_err(|e| format!("Failed to delete group project video refs: {}", e))?;
 
         tx.execute(
             "DELETE FROM projects WHERE project_group_id = ?1",
@@ -628,6 +759,7 @@ pub fn delete_project_group(
         .map_err(|e| format!("Failed to commit delete group transaction: {}", e))?;
 
     prune_unreferenced_images(&app)?;
+    prune_unreferenced_videos(&app)?;
     Ok(())
 }
 
