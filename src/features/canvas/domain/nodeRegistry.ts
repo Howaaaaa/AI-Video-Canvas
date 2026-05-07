@@ -40,6 +40,7 @@ export interface CanvasNodeDefinition<TData extends CanvasNodeData = CanvasNodeD
   menuLabelKey: string;
   menuIcon: MenuIconKey;
   visibleInMenu: boolean;
+  menuOrder?: number;
   capabilities: CanvasNodeCapabilities;
   connectivity: CanvasNodeConnectivity;
   createDefaultData: () => TData;
@@ -52,6 +53,7 @@ const uploadNodeDefinition: CanvasNodeDefinition<UploadImageNodeData> = {
   menuLabelKey: 'node.menu.uploadImage',
   menuIcon: 'upload',
   visibleInMenu: true,
+  menuOrder: 1,
   capabilities: {
     toolbar: true,
     promptInput: false,
@@ -83,6 +85,7 @@ const imageEditNodeDefinition: CanvasNodeDefinition<ImageEditNodeData> = {
   menuLabelKey: 'node.menu.aiImageGeneration',
   menuIcon: 'sparkles',
   visibleInMenu: true,
+  menuOrder: 2,
   capabilities: {
     toolbar: true,
     promptInput: false,
@@ -201,6 +204,7 @@ const textAnnotationNodeDefinition: CanvasNodeDefinition<TextAnnotationNodeData>
   menuLabelKey: 'node.menu.textAnnotation',
   menuIcon: 'text',
   visibleInMenu: true,
+  menuOrder: 5,
   capabilities: {
     toolbar: true,
     promptInput: false,
@@ -263,6 +267,7 @@ const storyboardGenNodeDefinition: CanvasNodeDefinition<StoryboardGenNodeData> =
   menuLabelKey: 'node.menu.storyboardGen',
   menuIcon: 'sparkles',
   visibleInMenu: true,
+  menuOrder: 6,
   capabilities: {
     toolbar: true,
     promptInput: false,
@@ -300,6 +305,7 @@ const aiChatNodeDefinition: CanvasNodeDefinition<AiChatNodeData> = {
   menuLabelKey: 'node.menu.aiChat',
   menuIcon: 'chat',
   visibleInMenu: true,
+  menuOrder: 4,
   capabilities: {
     toolbar: true,
     promptInput: false,
@@ -327,6 +333,7 @@ const aiVideoNodeDefinition: CanvasNodeDefinition<AiVideoNodeData> = {
   menuLabelKey: 'node.menu.aiVideo',
   menuIcon: 'video',
   visibleInMenu: true,
+  menuOrder: 3,
   capabilities: {
     toolbar: true,
     promptInput: false,
@@ -371,7 +378,9 @@ export function getNodeDefinition(type: CanvasNodeType): CanvasNodeDefinition {
 }
 
 export function getMenuNodeDefinitions(): CanvasNodeDefinition[] {
-  return Object.values(canvasNodeDefinitions).filter((definition) => definition.visibleInMenu);
+  return Object.values(canvasNodeDefinitions)
+    .filter((definition) => definition.visibleInMenu)
+    .sort((a, b) => (a.menuOrder ?? 99) - (b.menuOrder ?? 99));
 }
 
 export function nodeHasSourceHandle(type: CanvasNodeType): boolean {
@@ -391,5 +400,6 @@ export function getConnectMenuNodeTypes(handleType: 'source' | 'target'): Canvas
     .filter((definition) => (fromSource
       ? definition.connectivity.targetHandle
       : definition.connectivity.sourceHandle))
+    .sort((a, b) => (a.menuOrder ?? 99) - (b.menuOrder ?? 99))
     .map((definition) => definition.type);
 }
