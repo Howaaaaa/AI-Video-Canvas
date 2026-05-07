@@ -96,6 +96,7 @@ export const CanvasNodeImage = memo(({
       {...props}
       key={retryKey}
       src={effectiveSrc}
+      decoding="async"
       data-viewer-src={
         typeof viewerSourceUrl === 'string' && viewerSourceUrl.trim().length > 0
           ? viewerSourceUrl.trim()

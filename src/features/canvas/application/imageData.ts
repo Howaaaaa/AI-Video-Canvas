@@ -82,6 +82,7 @@ function createImagePipelineError(message: string, details?: string, cause?: unk
 }
 
 const ORIGINAL_IMAGE_ZOOM_THRESHOLD = 1.45;
+const TINY_IMAGE_ZOOM_THRESHOLD = 0.6;
 
 export function shouldUseOriginalImageByZoom(zoom: number): boolean {
   return Number.isFinite(zoom) && zoom >= ORIGINAL_IMAGE_ZOOM_THRESHOLD;
@@ -91,18 +92,21 @@ export function resolveImageSourceByZoom(
   zoom: number,
   imageUrl: string | null | undefined,
   previewImageUrl: string | null | undefined,
-  _tinyPreviewImageUrl: string | null | undefined,
+  tinyPreviewImageUrl: string | null | undefined,
 ): string | null {
-  // Tiny level disabled — always use original or preview only
   if (!Number.isFinite(zoom)) {
-    const picked = imageUrl || previewImageUrl;
+    const picked = imageUrl || previewImageUrl || tinyPreviewImageUrl;
+    return picked ? resolveImageDisplayUrl(picked) : null;
+  }
+  if (zoom < TINY_IMAGE_ZOOM_THRESHOLD) {
+    const picked = tinyPreviewImageUrl || previewImageUrl || imageUrl;
     return picked ? resolveImageDisplayUrl(picked) : null;
   }
   if (zoom >= ORIGINAL_IMAGE_ZOOM_THRESHOLD) {
-    const picked = imageUrl || previewImageUrl;
+    const picked = imageUrl || previewImageUrl || tinyPreviewImageUrl;
     return picked ? resolveImageDisplayUrl(picked) : null;
   }
-  const picked = previewImageUrl || imageUrl;
+  const picked = previewImageUrl || imageUrl || tinyPreviewImageUrl;
   return picked ? resolveImageDisplayUrl(picked) : null;
 }
 
