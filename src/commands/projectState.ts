@@ -94,3 +94,8 @@ export async function assignProjectToGroup(
 ): Promise<void> {
   await invoke('assign_project_to_group', { projectId, groupId });
 }
+
+/** Clean up image files not referenced by any project. Safe to call on startup. */
+export async function cleanupUnreferencedImages(): Promise<void> {
+  await invoke('cleanup_unreferenced_images');
+}

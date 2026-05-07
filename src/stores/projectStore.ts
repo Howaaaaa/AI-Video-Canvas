@@ -10,6 +10,7 @@ import {
 } from './canvasStore';
 import {
   assignProjectToGroup,
+  cleanupUnreferencedImages,
   createProjectGroup,
   deleteProjectGroup,
   deleteProjectRecord,
@@ -662,6 +663,12 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         listProjectGroups(),
       ]);
       const projects = records.map(toProjectSummary).sort((a, b) => b.updatedAt - a.updatedAt);
+
+      // Fire-and-forget: clean up orphaned images at startup (safe, no race with saves).
+      cleanupUnreferencedImages().catch((error) => {
+        console.warn('[projectStore] startup image cleanup failed (non-fatal):', error);
+      });
+
       set({
         projects,
         groups: groupRecords,

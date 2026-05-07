@@ -439,7 +439,12 @@ pub fn upsert_project_record(app: AppHandle, record: ProjectRecord) -> Result<()
     tx.commit()
         .map_err(|e| format!("Failed to commit upsert transaction: {}", e))?;
 
-    prune_unreferenced_images(&app)?;
+    // NOTE: prune_unreferenced_images intentionally NOT called here.
+    // Pruning during every save creates a race: a newly persisted image file may not
+    // yet be referenced by any project's refs (due to save debouncing), causing it to
+    // be deleted before the next save that registers it. This manifests as random
+    // "question mark" icons on image nodes after undo/redo or rapid operations.
+    // Pruning is only done when a project is explicitly deleted.
     Ok(())
 }
 
@@ -494,6 +499,13 @@ pub fn delete_project_record(app: AppHandle, project_id: String) -> Result<(), S
 
     prune_unreferenced_images(&app)?;
     Ok(())
+}
+
+/// Cleans up image files that are no longer referenced by any project.
+/// Safe to call on app startup or manually.
+#[tauri::command]
+pub fn cleanup_unreferenced_images(app: AppHandle) -> Result<(), String> {
+    prune_unreferenced_images(&app)
 }
 
 #[tauri::command]
